@@ -1,0 +1,18 @@
+{
+    "development": {
+        "username": "presensi_user",
+        "password": "presensi_password",
+        "database": "presensi_db",
+        "host": "localhost",
+        "port": 5432,
+        "dialect": "postgres"
+    },
+    "production": {
+        "username": "presensi_user",
+        "password": "presensi_password",
+        "database": "presensi_db",
+        "host": "localhost",
+        "port": 5432,
+        "dialect": "postgres"
+    }
+}

@@ -1,0 +1,58 @@
+# Production docker-compose configuration
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:16-alpine
+    container_name: presensi_postgres_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - presensi_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Node.js Service (Production)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: presensi_backend_prod
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=${PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      - GEOFENCE_LAT=${GEOFENCE_LAT}
+      - GEOFENCE_LNG=${GEOFENCE_LNG}
+      - GEOFENCE_RADIUS=${GEOFENCE_RADIUS}
+      - WORK_START_TIME=${WORK_START_TIME}
+      - WORK_END_TIME=${WORK_END_TIME}
+    ports:
+      - "${PORT}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - presensi_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  presensi_network:
+    driver: bridge
