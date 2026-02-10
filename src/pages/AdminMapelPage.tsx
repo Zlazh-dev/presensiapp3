@@ -8,7 +8,7 @@ const AdminMapelPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedMapel, setSelectedMapel] = useState<Mapel | null>(null);
-  
+
   const [formData, setFormData] = useState<Pick<CreateMapelRequest, 'name' | 'code'>>({
     name: '',
     code: '',
@@ -38,7 +38,7 @@ const AdminMapelPage: React.FC = () => {
 
   // Update mapel mutation
   const updateMapelMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<CreateMapelRequest> }) => 
+    mutationFn: ({ id, data }: { id: number; data: Partial<CreateMapelRequest> }) =>
       adminApi.updateMapel(id, data),
     onSuccess: () => {
       showToast('Mapel berhasil diupdate', 'success');
@@ -117,7 +117,7 @@ const AdminMapelPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent, isEdit = false) => {
     e.preventDefault();
-    
+
     const isValid = await validateForm(isEdit);
     if (!isValid) return;
 
@@ -162,28 +162,27 @@ const AdminMapelPage: React.FC = () => {
   ) || [];
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Mata Pelajaran</h1>
-        <p className="text-gray-600 mt-1">Kelola mata pelajaran dan penugasan guru</p>
+    <div className="p-4 sm:p-6">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Mata Pelajaran</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">Kelola mata pelajaran dan penugasan guru</p>
       </div>
 
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
-          toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-        } text-white`}>
+        <div className={`fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+          } text-white`}>
           {toast.message}
         </div>
       )}
 
       {/* Add Mapel Form */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
         <div className="flex items-center gap-2 mb-4">
-          <BookOpen className="w-5 h-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Tambah Mapel Baru</h2>
+          <BookOpen className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900">Tambah Mapel Baru</h2>
         </div>
-        
+
         <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -219,7 +218,7 @@ const AdminMapelPage: React.FC = () => {
               )}
             </div>
           </div>
-          
+
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
               <Calendar className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -257,7 +256,7 @@ const AdminMapelPage: React.FC = () => {
       </div>
 
       {/* Mapel Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Daftar Mata Pelajaran</h2>
           <div className="relative w-full sm:w-64">
@@ -283,13 +282,13 @@ const AdminMapelPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[550px]">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Nama</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Kode</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Jadwal Terjadwal</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
+                  <th className="text-left py-3 px-3 sm:px-4 font-semibold text-gray-700 text-sm">Nama</th>
+                  <th className="text-left py-3 px-3 sm:px-4 font-semibold text-gray-700 text-sm">Kode</th>
+                  <th className="text-left py-3 px-3 sm:px-4 font-semibold text-gray-700 text-sm">Jadwal</th>
+                  <th className="text-left py-3 px-3 sm:px-4 font-semibold text-gray-700 text-sm">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -313,9 +312,8 @@ const AdminMapelPage: React.FC = () => {
                           {mapel.classes.slice(0, 3).map((className, idx) => (
                             <div
                               key={className}
-                              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${
-                                idx === 0 ? 'bg-blue-500' : idx === 1 ? 'bg-indigo-500' : 'bg-purple-500'
-                              }`}
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${idx === 0 ? 'bg-blue-500' : idx === 1 ? 'bg-indigo-500' : 'bg-purple-500'
+                                }`}
                               style={{ zIndex: 3 - idx }}
                             >
                               {className}
@@ -344,12 +342,12 @@ const AdminMapelPage: React.FC = () => {
                             // Navigate to jadwal page with mapel filter
                             window.location.href = `/jadwal?mapelId=${mapel.id}`;
                           }}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
+                          className="flex items-center gap-1 px-2 sm:px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-xs sm:text-sm font-medium"
                           title="Kelola Jadwal"
                         >
-                          <Calendar className="w-4 h-4" />
-                          Kelola Jadwal
-                          <ArrowRight className="w-4 h-4" />
+                          <Calendar className="w-4 h-4 flex-shrink-0" />
+                          <span className="hidden sm:inline">Kelola</span> Jadwal
+                          <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                         </button>
                         <button
                           onClick={() => handleEdit(mapel)}
@@ -468,7 +466,7 @@ const AdminMapelPage: React.FC = () => {
                 Hapus Mapel?
               </h3>
               <p className="text-gray-600 mb-6">
-                Anda yakin ingin menghapus mapel <strong>{selectedMapel.name}</strong>? 
+                Anda yakin ingin menghapus mapel <strong>{selectedMapel.name}</strong>?
                 Tindakan ini tidak dapat dibatalkan.
               </p>
               <div className="flex gap-3 justify-center">

@@ -5,6 +5,7 @@ import sequelize from '../config/database';
 import { getIO } from '../socket';
 import * as XLSX from 'xlsx';
 import multer from 'multer';
+import { getJakartaNow, getJakartaToday, getJakartaTime, getJakartaDayOfWeek } from '../utils/date';
 
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const dayToNumber: Record<string, number> = {
@@ -118,10 +119,7 @@ export const updateSchedule = async (req: Request, res: Response): Promise<void>
         await schedule.update({ classId, subjectId, teacherId, dayOfWeek, startTime, endTime, academicYear });
 
         // 1. Sync existing sessions for today (if any)
-        const now = new Date();
-        const jakartaOffset = 7 * 60;
-        const jakartaTime = new Date(now.getTime() + (jakartaOffset + now.getTimezoneOffset()) * 60000);
-        const todayStr = jakartaTime.toISOString().split('T')[0];
+        const todayStr = getJakartaToday();
 
         const outputSchedule = await Schedule.findByPk(schedule.id, {
             include: [
@@ -190,12 +188,59 @@ export const deleteSchedule = async (req: Request, res: Response): Promise<void>
             return;
         }
 
+        // Delete dependent records first (FK constraints may not cascade at DB level)
+        const sessions = await Session.findAll({ where: { scheduleId: Number(id) }, attributes: ['id'] });
+        const sessionIds = sessions.map((s: any) => s.id);
+        if (sessionIds.length > 0) {
+            const { StudentAttendance } = require('../models');
+            await StudentAttendance.destroy({ where: { sessionId: sessionIds } });
+            await TeacherAttendance.destroy({ where: { sessionId: sessionIds } });
+            await Session.destroy({ where: { id: sessionIds } });
+        }
+
         await schedule.destroy();
         try { getIO().emit('schedule:deleted', Number(id)); } catch (e) { }
 
         res.json({ message: 'Schedule deleted successfully' });
     } catch (error) {
         console.error('Delete schedule error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+/**
+ * Bulk delete schedules
+ * POST /api/schedules/bulk-delete
+ * Body: { ids: number[] }
+ */
+export const bulkDeleteSchedules = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { ids } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) {
+            res.status(400).json({ error: 'ids array is required' });
+            return;
+        }
+
+        // Delete dependent records first (FK constraints may not cascade at DB level)
+        const sessions = await Session.findAll({ where: { scheduleId: ids }, attributes: ['id'] });
+        const sessionIds = sessions.map((s: any) => s.id);
+
+        if (sessionIds.length > 0) {
+            // Delete student attendance linked to these sessions
+            const { StudentAttendance } = require('../models');
+            await StudentAttendance.destroy({ where: { sessionId: sessionIds } });
+            // Delete teacher attendance linked to these sessions
+            await TeacherAttendance.destroy({ where: { sessionId: sessionIds } });
+            // Delete the sessions themselves
+            await Session.destroy({ where: { id: sessionIds } });
+        }
+
+        const deleted = await Schedule.destroy({ where: { id: ids } });
+        try { getIO().emit('schedule:deleted', ids); } catch (e) { }
+
+        res.json({ message: `${deleted} jadwal berhasil dihapus`, count: deleted });
+    } catch (error) {
+        console.error('Bulk delete schedules error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -334,10 +379,7 @@ export const bulkAssign = async (req: Request, res: Response): Promise<void> => 
 
         // --- Post-transaction: Sync Sessions & Emit Events ---
         try {
-            const now = new Date();
-            const jakartaOffset = 7 * 60;
-            const jakartaTime = new Date(now.getTime() + (jakartaOffset + now.getTimezoneOffset()) * 60000);
-            const todayStr = jakartaTime.toISOString().split('T')[0];
+            const todayStr = getJakartaToday();
             const io = getIO();
 
             for (const sched of results) {
@@ -581,13 +623,11 @@ export const uploadMiddleware = multer({ storage: multer.memoryStorage() }).sing
  */
 export const getUpcomingSessions = async (req: Request, res: Response): Promise<void> => {
     try {
-        // Use Asia/Jakarta timezone for "today"
-        const now = new Date();
-        const jakartaOffset = 7 * 60; // UTC+7 in minutes
-        const jakartaTime = new Date(now.getTime() + (jakartaOffset + now.getTimezoneOffset()) * 60000);
-        const today = jakartaTime.toISOString().split('T')[0];
-        const dayOfWeek = jakartaTime.getDay() || 7; // 1=Mon … 7=Sun
-        const currentTime = jakartaTime.toTimeString().split(' ')[0]; // HH:MM:SS
+        // TZ is set to Asia/Jakarta in server.ts — new Date() is already WIB
+        const jakartaTime = getJakartaNow();
+        const today = getJakartaToday();
+        const dayOfWeek = getJakartaDayOfWeek();
+        const currentTime = getJakartaTime();
 
         // 1. Find schedules for today's day-of-week (real schedules from Manajemen Jadwal)
         const todaySchedules = await Schedule.findAll({
@@ -622,10 +662,11 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
             teacherCheckInTimes[r.teacherId] = r.checkInTime;
         });
 
-        // 3. Find/create sessions for today's schedules, filter to those where teacher is absent
+        // 3. Find/create sessions only for schedules where the teacher is ABSENT today
+        // If the teacher checked in (daily attendance), they're at school and can teach → no substitute needed
         const result: any[] = [];
         for (const sched of todaySchedules as any[]) {
-            // Skip if teacher has already checked in — they're present, no substitute needed
+            // Skip sessions where the original teacher is present (checked in for the day)
             if (checkedInTeacherIds.has(sched.teacherId)) continue;
 
             // Find or create the session for this schedule today
@@ -651,7 +692,7 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
                 substituteCheckedIn = checkedInTeacherIds.has(sess.substituteTeacherId);
             }
 
-            // Time calculations
+            // Time calculations — TZ=Asia/Jakarta means these parse as WIB
             const sessionStartDt = new Date(`${today}T${sched.startTime}`);
             const sessionEndDt = new Date(`${today}T${sched.endTime}`);
             const startMs = sessionStartDt.getTime();
@@ -673,7 +714,8 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
                 sessionStatus = 'completed';
             }
 
-            // Warning: ongoing session without any teacher (original or substitute)
+            // Warning: ongoing session without any teacher present
+            // At this point, original teacher is absent (filtered above). Check if substitute is present.
             const hasAnyTeacher = substituteCheckedIn;
             const warning = sessionStatus === 'ongoing' && !hasAnyTeacher;
 
@@ -689,7 +731,7 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
                 substituteCheckedIn,
                 // Real-time countdown data
                 countdownMins,
-                countdownMs: Math.max(0, countdownMs), // For 1-second countdown
+                countdownMs: Math.max(0, countdownMs),
                 startTimeMs: startMs,
                 endTimeMs: endMs,
                 serverTimeMs: nowMs,
@@ -771,27 +813,62 @@ export const assignSubstitute = async (req: Request, res: Response): Promise<voi
  */
 export const getAvailableTeachers = async (req: Request, res: Response): Promise<void> => {
     try {
-        // Asia/Jakarta timezone
-        const now = new Date();
-        const jakartaOffset = 7 * 60;
-        const jakartaTime = new Date(now.getTime() + (jakartaOffset + now.getTimezoneOffset()) * 60000);
-        const today = jakartaTime.toISOString().split('T')[0];
-        const dayOfWeek = jakartaTime.getDay() || 7;
-        const currentTime = jakartaTime.toTimeString().split(' ')[0];
+        // TZ is set to Asia/Jakarta — new Date() is already WIB
+        const today = getJakartaToday();
+        const dayOfWeek = getJakartaDayOfWeek();
+        const currentTime = getJakartaTime();
 
-        // 1. Find teacher IDs who checked in today
+        // 1. Find teacher attendance records for today
         const { TeacherAttendance } = require('../models');
-        const checkedIn = await TeacherAttendance.findAll({
+        const todayAttendance = await TeacherAttendance.findAll({
             where: {
                 date: today,
                 status: { [Op.in]: ['present', 'late'] },
-                checkoutTime: { [Op.is]: null } // Only those who haven't checked out
             },
-            attributes: ['teacherId'],
+            attributes: ['teacherId', 'checkOutTime', 'sessionId'],
         });
-        const checkedInIds = new Set(checkedIn.map((r: any) => r.teacherId));
 
-        // 2. Find teachers currently teaching (have active schedule right now)
+        // Build sets: who checked in at all, who has checked out (left the building)
+        const checkedInIds = new Set<number>();
+        const checkedOutIds = new Set<number>();
+        for (const att of todayAttendance as any[]) {
+            checkedInIds.add(att.teacherId);
+            // Teacher has checked out = they LEFT the building
+            // For regular attendance (sessionId null): checkOutTime means they left
+            // For session attendance: checkOutTime just means session ended, not necessarily left
+            if (!att.sessionId && att.checkOutTime) {
+                checkedOutIds.add(att.teacherId);
+            }
+        }
+
+        // Teachers still in building = checked in but NOT checked out (regular attendance)
+        const stillInBuildingIds = new Set<number>();
+        for (const id of checkedInIds) {
+            if (!checkedOutIds.has(id)) {
+                stillInBuildingIds.add(id);
+            }
+        }
+
+        // 2. Find teachers who are busy right now
+        // A teacher is busy if:
+        //   (a) They have a Session with status='ongoing' in the DB (explicitly started), OR
+        //   (b) They have a schedule in the current time window AND they've checked in (at school, should be teaching)
+        const currentlyTeachingIds = new Set<number>();
+
+        // 2a. Check DB session status
+        const ongoingSessions = await Session.findAll({
+            where: {
+                date: today,
+                status: 'ongoing',
+            },
+            include: [{ model: Schedule, as: 'schedule', attributes: ['teacherId'] }],
+        });
+        for (const s of ongoingSessions as any[]) {
+            if (s.schedule?.teacherId) currentlyTeachingIds.add(s.schedule.teacherId);
+            if (s.substituteTeacherId) currentlyTeachingIds.add(s.substituteTeacherId);
+        }
+
+        // 2b. Check schedule time window — teachers who have a class right now and are checked in
         const activeSchedules = await Schedule.findAll({
             where: {
                 dayOfWeek,
@@ -801,7 +878,12 @@ export const getAvailableTeachers = async (req: Request, res: Response): Promise
             },
             attributes: ['teacherId'],
         });
-        const currentlyTeachingIds = new Set(activeSchedules.map((s: any) => s.teacherId));
+        for (const sched of activeSchedules as any[]) {
+            // Only mark as busy if teacher has actually checked in (present at school)
+            if (stillInBuildingIds.has(sched.teacherId)) {
+                currentlyTeachingIds.add(sched.teacherId);
+            }
+        }
 
         // 3. Get all teachers
         const allTeachers = await Teacher.findAll({
@@ -809,13 +891,14 @@ export const getAvailableTeachers = async (req: Request, res: Response): Promise
         });
 
         const available = allTeachers
-            .filter((t: any) => checkedInIds.has(t.id)) // Must have checked in
             .map((t: any) => ({
                 id: t.id,
                 userId: t.userId,
                 name: t.user?.name || 'Unknown',
                 employeeId: t.employeeId,
-                isBusy: currentlyTeachingIds.has(t.id), // Currently in class
+                isCheckedIn: stillInBuildingIds.has(t.id), // Currently in building (not checked out)
+                hasCheckedOut: checkedOutIds.has(t.id), // Has left the building
+                isBusy: currentlyTeachingIds.has(t.id), // Currently teaching (by DB status or schedule time)
             }));
 
         res.json({ teachers: available });

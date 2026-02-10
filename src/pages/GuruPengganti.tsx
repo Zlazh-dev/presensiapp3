@@ -39,6 +39,8 @@ interface TeacherItem {
     userId: number;
     name: string;
     employeeId: string;
+    isCheckedIn: boolean;
+    hasCheckedOut: boolean;
     isBusy: boolean;
 }
 
@@ -64,17 +66,19 @@ const DraggableTeacher: React.FC<{ teacher: TeacherItem }> = ({ teacher }) => {
     const [{ isDragging }, drag] = useDrag(() => ({
         type: DND_TYPE,
         item: { teacherId: teacher.id, teacherName: teacher.name },
-        canDrag: () => !teacher.isBusy, // Prevent dragging busy teachers
+        canDrag: () => !teacher.isBusy && !teacher.hasCheckedOut, // Prevent dragging busy or checked-out teachers
         collect: (monitor) => ({ isDragging: monitor.isDragging() }),
     }), [teacher]);
 
+    const isUnavailable = teacher.isBusy || teacher.hasCheckedOut;
+
     return (
         <div
-            ref={drag}
+            ref={drag as any}
             className={`
                 flex items-center gap-3 px-4 py-3 rounded-xl border
                 transition-all duration-200 select-none
-                ${teacher.isBusy
+                ${isUnavailable
                     ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
                     : 'bg-white border-gray-200 hover:border-emerald-300 hover:shadow-md cursor-grab'
                 }
@@ -82,16 +86,31 @@ const DraggableTeacher: React.FC<{ teacher: TeacherItem }> = ({ teacher }) => {
             `}
         >
             <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 ${teacher.isCheckedIn
+                ? 'bg-gradient-to-br from-emerald-400 to-teal-500'
+                : 'bg-gradient-to-br from-gray-300 to-gray-400'
+                }`}>
                 {teacher.name.charAt(0)}
             </div>
             <div className="min-w-0 flex-1">
                 <p className="font-medium text-gray-900 text-sm truncate">{teacher.name}</p>
                 <p className="text-xs text-gray-500">{teacher.employeeId}</p>
             </div>
-            {teacher.isBusy && (
+            {teacher.isBusy ? (
                 <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
                     Mengajar
+                </span>
+            ) : teacher.hasCheckedOut ? (
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                    Sudah Pulang
+                </span>
+            ) : teacher.isCheckedIn ? (
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                    Hadir
+                </span>
+            ) : (
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                    Belum Hadir
                 </span>
             )}
         </div>
@@ -116,13 +135,19 @@ const DroppableSession: React.FC<{
 
     // Calculate real-time countdown from client time
     const nowMs = now.getTime();
-    const diffMs = session.startTimeMs - nowMs;
-    const mins = Math.floor(Math.max(0, diffMs) / 60000);
-    const secs = Math.floor((Math.max(0, diffMs) % 60000) / 1000);
-    const isAssigned = !!session.substituteTeacherId;
 
-    // Use session status from backend
-    const { sessionStatus, warning } = session;
+    // Recompute status client-side for real-time accuracy (server snapshot may be stale)
+    let sessionStatus: SessionStatus = 'upcoming';
+    if (session.status === 'completed') {
+        sessionStatus = 'completed';
+    } else if (nowMs >= session.startTimeMs && nowMs <= session.endTimeMs) {
+        sessionStatus = 'ongoing';
+    } else if (nowMs > session.endTimeMs) {
+        sessionStatus = 'completed';
+    }
+
+    const warning = sessionStatus === 'ongoing' && !session.substituteTeacherId && !session.substituteCheckedIn;
+    const isAssigned = !!session.substituteTeacherId;
 
     // Countdown/status label
     let countdownLabel = '';
@@ -132,25 +157,33 @@ const DroppableSession: React.FC<{
         countdownLabel = '✅ Selesai';
         countdownColor = 'bg-gray-100 text-gray-600';
     } else if (sessionStatus === 'ongoing') {
+        const remainMs = session.endTimeMs - nowMs;
+        const remainMins = Math.floor(Math.max(0, remainMs) / 60000);
+        const remainSecs = Math.floor((Math.max(0, remainMs) % 60000) / 1000);
+
         if (warning) {
             countdownLabel = '⚠️ BUTUH GURU!';
             countdownColor = 'bg-red-500 text-white animate-pulse';
         } else if (session.substituteCheckedIn) {
-            countdownLabel = '✅ Sesi Aktif';
+            countdownLabel = `✅ Berakhir ${remainMins}m ${remainSecs}s`;
             countdownColor = 'bg-emerald-500 text-white';
         } else {
-            countdownLabel = '🔄 Berlangsung';
-            countdownColor = 'bg-blue-500 text-white';
+            countdownLabel = `🔄 Berakhir ${remainMins}m ${remainSecs}s`;
+            countdownColor = 'bg-amber-500 text-white';
         }
     } else {
         // upcoming
+        const diffMs = session.startTimeMs - nowMs;
+        const mins = Math.floor(Math.max(0, diffMs) / 60000);
+        const secs = Math.floor((Math.max(0, diffMs) % 60000) / 1000);
+
         if (mins < 60) {
             countdownLabel = `⏰ ${mins}m ${secs}s lagi`;
             countdownColor = mins <= 15
                 ? 'bg-red-100 text-red-700 animate-pulse'
                 : mins <= 30
                     ? 'bg-amber-100 text-amber-700'
-                    : 'bg-gray-100 text-gray-600';
+                    : 'bg-blue-100 text-blue-600';
         } else {
             countdownLabel = `⏰ ${Math.floor(mins / 60)}j ${mins % 60}m lagi`;
             countdownColor = 'bg-gray-100 text-gray-600';
@@ -162,7 +195,7 @@ const DroppableSession: React.FC<{
 
     return (
         <div
-            ref={drop}
+            ref={drop as any}
             className={`
                 relative rounded-xl border-2 p-4 transition-all duration-200
                 ${warning
@@ -249,7 +282,7 @@ const DroppableSession: React.FC<{
 const GuruPenggantiInner: React.FC = () => {
     const queryClient = useQueryClient();
     const [now, setNow] = useState(new Date());
-    const [serverTimeOffset, setServerTimeOffset] = useState(0); // Sync with server time
+    const [, setServerTimeOffset] = useState(0); // Sync with server time
 
     // Tick every 1 second for real-time countdown
     useEffect(() => {
@@ -356,8 +389,8 @@ const GuruPenggantiInner: React.FC = () => {
 
     const unassigned = sessions.filter((s) => !s.substituteTeacherId);
     const assigned = sessions.filter((s) => !!s.substituteTeacherId);
-    const freeTeachers = teachers.filter((t) => !t.isBusy);
-    const busyTeachers = teachers.filter((t) => t.isBusy);
+    const freeTeachers = teachers.filter((t) => !t.isBusy && !t.hasCheckedOut);
+    const busyTeachers = teachers.filter((t) => t.isBusy || t.hasCheckedOut);
 
     const isLoading = loadingSessions || loadingTeachers;
 

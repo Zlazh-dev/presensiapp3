@@ -2,9 +2,10 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Calendar, Download, Upload, Printer, Check, X, Loader2,
-    ChevronDown, Grid3X3, FileSpreadsheet
+    Grid3X3, Trash2
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import ConfirmModal from '../components/ConfirmModal';
+
 
 // ─── Types ────────────────────────────────────────────────────
 interface TimeSlot {
@@ -80,6 +81,8 @@ const Jadwal: React.FC = () => {
     const [bulkSubjectId, setBulkSubjectId] = useState('');
     const [bulkTeacherId, setBulkTeacherId] = useState('');
     const [importing, setImporting] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteIds, setDeleteIds] = useState<number[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── Queries ──
@@ -144,6 +147,26 @@ const Jadwal: React.FC = () => {
         },
     });
 
+    // ── Bulk delete mutation ──
+    const deleteMutation = useMutation({
+        mutationFn: async (ids: number[]) => {
+            const res = await fetch(`${API}/schedules/bulk-delete`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({ ids }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Bulk delete failed');
+            }
+            return res.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['scheduleGrid', selectedClassId] });
+            setSelectedCells([]);
+        },
+    });
+
     // ── Cell click handler ──
     const handleCellClick = useCallback(
         (dayIndex: number, slotIndex: number, e: React.MouseEvent) => {
@@ -195,6 +218,28 @@ const Jadwal: React.FC = () => {
 
         bulkMutation.mutate(assignments);
     }, [bulkSubjectId, bulkTeacherId, selectedCells, grid, timeSlots, bulkMutation]);
+
+    // ── Bulk delete ──
+    const handleBulkDelete = useCallback(() => {
+        // Collect scheduleIds from selected cells that have data
+        const ids = selectedCells
+            .map(cell => grid[cell.dayIndex]?.slots[cell.slotIndex]?.scheduleId)
+            .filter((id): id is number => id != null);
+
+        if (ids.length === 0) {
+            alert('Tidak ada jadwal pada sel yang dipilih');
+            return;
+        }
+
+        setDeleteIds(ids);
+        setShowDeleteConfirm(true);
+    }, [selectedCells, grid]);
+
+    const confirmDelete = useCallback(() => {
+        deleteMutation.mutate(deleteIds);
+        setShowDeleteConfirm(false);
+        setDeleteIds([]);
+    }, [deleteIds, deleteMutation]);
 
     // ── Download template ──
     const handleDownloadTemplate = useCallback(async () => {
@@ -281,35 +326,45 @@ const Jadwal: React.FC = () => {
     return (
         <div className="space-y-6 print:space-y-2">
             {/* ── Header ── */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 print:hidden">
+            <div className="flex flex-col gap-4 print:hidden">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <Grid3X3 className="w-7 h-7 text-blue-600" />
+                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+                        <Grid3X3 className="w-6 sm:w-7 h-6 sm:h-7 text-blue-600 flex-shrink-0" />
                         Manajemen Jadwal
                     </h1>
-                    <p className="text-gray-500 mt-1">Kelola jadwal pelajaran per kelas — klik sel untuk mengisi</p>
+                    <p className="text-sm sm:text-base text-gray-500 mt-1">Kelola jadwal pelajaran per kelas — klik sel untuk mengisi</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {selectedCells.length > 0 && (
-                        <button
-                            onClick={() => setShowBulkModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all text-sm font-medium shadow-sm"
-                        >
-                            <Check className="w-4 h-4" />
-                            Isi Mapel ({selectedCells.length} sel)
-                        </button>
+                        <>
+                            <button
+                                onClick={() => setShowBulkModal(true)}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all text-xs sm:text-sm font-medium shadow-sm"
+                            >
+                                <Check className="w-4 h-4" />
+                                Isi ({selectedCells.length})
+                            </button>
+                            <button
+                                onClick={handleBulkDelete}
+                                disabled={deleteMutation.isPending}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all text-xs sm:text-sm font-medium shadow-sm disabled:opacity-50"
+                            >
+                                {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                Hapus
+                            </button>
+                        </>
                     )}
                     <button
                         onClick={handleDownloadTemplate}
                         disabled={!selectedClassId}
-                        className="flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50"
                     >
                         <Download className="w-4 h-4" />
-                        Download Template
+                        <span className="hidden sm:inline">Download</span> Template
                     </button>
-                    <label className="flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium cursor-pointer">
+                    <label className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm font-medium cursor-pointer">
                         {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                        Import Jadwal
+                        Import
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -321,7 +376,7 @@ const Jadwal: React.FC = () => {
                     </label>
                     <button
                         onClick={handlePrint}
-                        className="flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                        className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm font-medium"
                     >
                         <Printer className="w-4 h-4" />
                         Print
@@ -337,7 +392,7 @@ const Jadwal: React.FC = () => {
             </div>
 
             {/* ── Class Tabs ── */}
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl print:hidden">
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl print:hidden overflow-x-auto scrollbar-hide">
                 {classes.map(cls => (
                     <button
                         key={cls.id}
@@ -346,7 +401,7 @@ const Jadwal: React.FC = () => {
                             setEditingCell(null);
                             setSelectedCells([]);
                         }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectedClassId === cls.id
+                        className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${selectedClassId === cls.id
                             ? 'bg-white text-blue-700 shadow-sm'
                             : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                             }`}
@@ -486,7 +541,7 @@ const Jadwal: React.FC = () => {
                     </div>
 
                     {/* ── Hint bar ── */}
-                    <div className="flex items-center gap-4 text-xs text-gray-400 mt-3 print:hidden">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-400 mt-3 print:hidden">
                         <span className="flex items-center gap-1">
                             <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-mono">Click</kbd>
                             Edit sel
@@ -581,6 +636,18 @@ const Jadwal: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* ── Delete Confirmation Modal ── */}
+            <ConfirmModal
+                open={showDeleteConfirm}
+                title="Hapus Jadwal?"
+                message={`${deleteIds.length} jadwal yang dipilih akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`}
+                confirmLabel="Hapus"
+                variant="danger"
+                loading={deleteMutation.isPending}
+                onConfirm={confirmDelete}
+                onCancel={() => { setShowDeleteConfirm(false); setDeleteIds([]); }}
+            />
 
             {/* Print-only styles */}
             <style>{`

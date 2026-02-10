@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import SesiMengajar from './pages/SesiMengajar';
 import GuruDashboard from './pages/GuruDashboard';
@@ -14,9 +15,26 @@ import Rekap from './pages/Rekap';
 import Laporan from './pages/Laporan';
 import ManajemenKelas from './pages/ManajemenKelas';
 import KelolaSiswa from './pages/KelolaSiswa';
-import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
+import TeacherRoute from './components/TeacherRoute';
 import MainLayout from './components/MainLayout';
+
+// Redirect `/` based on user role
+const RoleRedirect: React.FC = () => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.role === 'admin') return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/dashboard-guru" replace />;
+};
 
 function App() {
   return (
@@ -25,18 +43,17 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
 
-          {/* Protected Routes with Sidebar Layout */}
-          <Route element={<ProtectedRoute />}>
+          {/* Teacher Routes */}
+          <Route element={<TeacherRoute />}>
             <Route element={<MainLayout />}>
-              {/* Teacher Routes */}
               <Route path="/dashboard-guru" element={<GuruDashboard />} />
               <Route path="/sesi-mengajar" element={<SesiMengajar />} />
+              <Route path="/guru/rekap" element={<Rekap />} />
               <Route path="/profile" element={<div className="text-center text-gray-500 py-12">Profile page — coming soon</div>} />
-              <Route path="/" element={<Navigate to="/sesi-mengajar" replace />} />
             </Route>
           </Route>
 
-          {/* Admin-only Routes with Sidebar Layout */}
+          {/* Admin-only Routes */}
           <Route element={<AdminRoute />}>
             <Route element={<MainLayout />}>
               <Route path="/dashboard" element={<DashboardOverview />} />
@@ -53,6 +70,9 @@ function App() {
             </Route>
           </Route>
 
+          {/* Role-based root redirect */}
+          <Route path="/" element={<RoleRedirect />} />
+
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
@@ -62,3 +82,4 @@ function App() {
 }
 
 export default App;
+

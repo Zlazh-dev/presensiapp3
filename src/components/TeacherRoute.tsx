@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const AdminRoute: React.FC = () => {
+const TeacherRoute: React.FC = () => {
     const { isAuthenticated, isLoading, user } = useAuth();
     const location = useLocation();
 
@@ -18,11 +18,12 @@ const AdminRoute: React.FC = () => {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    if (user?.role !== 'admin') {
-        return <Navigate to="/dashboard-guru" replace />;
+    // Only allow teacher/guru roles
+    if (user?.role !== 'teacher' && user?.role !== 'guru') {
+        return <Navigate to="/dashboard" replace />;
     }
 
     return <Outlet />;
 };
 
-export default AdminRoute;
+export default TeacherRoute;

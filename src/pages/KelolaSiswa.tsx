@@ -7,6 +7,7 @@ import {
     ArrowLeft, Plus, Edit2, Trash2, Search, X, Users,
     Download, Upload, Loader2, CheckCircle, AlertCircle, Save,
 } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
 
 interface Student {
     id: number;
@@ -35,6 +36,7 @@ const KelolaSiswa: React.FC = () => {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [formData, setFormData] = useState<FormData>(emptyForm);
     const [importResult, setImportResult] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; student: Student | null }>({ open: false, student: null });
 
     // Fetch students
     const { data, isLoading, error } = useQuery({
@@ -168,9 +170,14 @@ const KelolaSiswa: React.FC = () => {
 
     // Delete handler
     const handleDelete = (student: Student) => {
-        if (confirm(`Hapus siswa "${student.name}"?`)) {
-            deleteMutation.mutate(student.id);
+        setDeleteConfirm({ open: true, student });
+    };
+
+    const handleDeleteConfirm = () => {
+        if (deleteConfirm.student) {
+            deleteMutation.mutate(deleteConfirm.student.id);
         }
+        setDeleteConfirm({ open: false, student: null });
     };
 
     const cancelForm = () => {
@@ -248,8 +255,8 @@ const KelolaSiswa: React.FC = () => {
             {/* Import Result Banner */}
             {importResult && (
                 <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${importResult.type === 'success'
-                        ? 'bg-green-50 text-green-700 border border-green-200'
-                        : 'bg-red-50 text-red-700 border border-red-200'
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
                     }`}>
                     {importResult.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
                     {importResult.message}
@@ -362,10 +369,10 @@ const KelolaSiswa: React.FC = () => {
                                     <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>
                                     <td className="px-4 py-3">
                                         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${student.gender === 'M'
-                                                ? 'bg-blue-100 text-blue-700'
-                                                : student.gender === 'F'
-                                                    ? 'bg-pink-100 text-pink-700'
-                                                    : 'bg-gray-100 text-gray-500'
+                                            ? 'bg-blue-100 text-blue-700'
+                                            : student.gender === 'F'
+                                                ? 'bg-pink-100 text-pink-700'
+                                                : 'bg-gray-100 text-gray-500'
                                             }`}>
                                             {student.gender === 'M' ? 'Laki-laki' : student.gender === 'F' ? 'Perempuan' : '-'}
                                         </span>
@@ -401,6 +408,17 @@ const KelolaSiswa: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            <ConfirmModal
+                open={deleteConfirm.open}
+                title="Hapus Siswa?"
+                message={`Siswa "${deleteConfirm.student?.name || ''}" akan dihapus dari kelas ini.`}
+                confirmLabel="Hapus"
+                variant="danger"
+                loading={deleteMutation.isPending}
+                onConfirm={handleDeleteConfirm}
+                onCancel={() => setDeleteConfirm({ open: false, student: null })}
+            />
         </div>
     );
 };

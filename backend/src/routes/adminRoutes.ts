@@ -174,4 +174,31 @@ router.get('/data-integrity', async (req, res) => {
     }
 });
 
+// ========== BACKUP ==========
+
+import { backupAllData, getBackupInfo, restoreData } from '../controllers/backupController';
+
+/**
+ * @route   GET /api/admin/backup
+ * @desc    Download full database backup as JSON
+ * @access  Admin only
+ */
+router.get('/backup', backupAllData);
+
+/**
+ * @route   GET /api/admin/backup/info
+ * @desc    Get table counts for backup preview
+ * @access  Admin only
+ */
+router.get('/backup/info', getBackupInfo);
+
+/**
+ * @route   POST /api/admin/restore
+ * @desc    Restore database from JSON backup file
+ * @access  Admin only
+ * @body    Full backup JSON object with confirmText: 'RESTORE DATA'
+ */
+import express from 'express';
+router.post('/restore', express.json({ limit: '50mb' }), restoreData);
+
 export default router;

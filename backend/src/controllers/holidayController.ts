@@ -42,7 +42,8 @@ export const getAllHolidays = async (req: Request, res: Response): Promise<void>
  */
 export const getActiveHolidays = async (req: Request, res: Response): Promise<void> => {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const { getJakartaToday } = require('../utils/date');
+        const today = getJakartaToday();
         const { classId } = req.query;
 
         const where: any = {

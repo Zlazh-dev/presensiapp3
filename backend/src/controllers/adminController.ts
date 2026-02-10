@@ -181,7 +181,7 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
             password: hashedPassword,
             role,
             name,
-            email: email || null,
+            email: email || `${username}@presensiapp.local`,
             isActive: true, // Explicitly set to ensure login works
         });
 

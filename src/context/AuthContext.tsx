@@ -1,5 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import api from '../lib/api';
+import { createContext, useState, useContext, useEffect, type ReactNode } from 'react';
 
 // Define User type based on backend model
 export interface User {

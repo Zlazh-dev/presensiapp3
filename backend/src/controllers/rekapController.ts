@@ -220,10 +220,11 @@ export const getGuruClass = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
-        // Get sessions in range with schedule info
+        // Get sessions in range with schedule info — only completed/ongoing (actual teaching)
         const sessions = await Session.findAll({
             where: {
                 date: { [Op.between]: [start as string, end as string] },
+                status: { [Op.in]: ['ongoing', 'completed'] },
             },
             include: [
                 {
@@ -248,9 +249,12 @@ export const getGuruClass = async (req: Request, res: Response): Promise<void> =
             order: [['date', 'ASC']],
         });
 
+        // Deduplicate: same teacher-date-class-subject combo
+        const deduplicated = deduplicateSessions(sessions as any[]);
+
         // Group by class
         const classMap = new Map<number, any>();
-        for (const s of sessions as any[]) {
+        for (const s of deduplicated) {
             const cls = s.schedule?.class;
             if (!cls) continue;
             if (!classMap.has(cls.id)) {
@@ -280,12 +284,14 @@ export const getGuruClass = async (req: Request, res: Response): Promise<void> =
             });
         }
 
-        const result = Array.from(classMap.values()).map((c) => ({
-            ...c,
-            percentage: c.totalSessions > 0
-                ? Math.round((c.attended / c.totalSessions) * 100)
-                : 0,
-        }));
+        const result = Array.from(classMap.values())
+            .map((c) => ({
+                ...c,
+                percentage: c.totalSessions > 0
+                    ? Math.round((c.attended / c.totalSessions) * 100)
+                    : 0,
+            }))
+            .sort((a, b) => a.className.localeCompare(b.className));
 
         res.json({ classes: result });
     } catch (error) {
@@ -500,41 +506,76 @@ export const exportAttendance = async (req: Request, res: Response): Promise<voi
             }));
             sheetName = 'Rekap Guru';
         } else if (type === 'siswa-summary') {
-            // Reuse summary logic
+            // Per-student detail export grouped by class
             const classes = await Class.findAll({
-                include: [{ model: Student, as: 'students', attributes: ['id'] }],
+                include: [{ model: Student, as: 'students', attributes: ['id', 'nis', 'name', 'gender'] }],
                 order: [['name', 'ASC']],
             });
 
             for (const cls of classes as any[]) {
-                const studentIds = cls.students.map((s: any) => s.id);
+                // Sort students alphabetically
+                const sortedStudents = [...cls.students].sort((a: any, b: any) =>
+                    a.name.localeCompare(b.name)
+                );
+                const studentIds = sortedStudents.map((s: any) => s.id);
+
+                // Get sessions for this class
                 const sessions = await Session.findAll({
                     where: { date: { [Op.between]: [start, end] } },
                     include: [{ model: Schedule, as: 'schedule', where: { classId: cls.id }, attributes: ['id'] }],
                     attributes: ['id'],
                 });
                 const sessionIds = sessions.map((s: any) => s.id);
-                const attendances = await StudentAttendance.findAll({
-                    where: { studentId: { [Op.in]: studentIds }, sessionId: { [Op.in]: sessionIds } },
-                    attributes: ['status'],
-                });
 
-                const counts = { present: 0, absent: 0, sick: 0, permission: 0, late: 0 };
-                for (const a of attendances as any[]) {
-                    if (counts[a.status as keyof typeof counts] !== undefined)
-                        counts[a.status as keyof typeof counts]++;
+                let classTotalPresent = 0, classTotalLate = 0, classTotalSick = 0, classTotalPermission = 0, classTotalAbsent = 0;
+
+                for (const student of sortedStudents as any[]) {
+                    const attendances = await StudentAttendance.findAll({
+                        where: { studentId: student.id, sessionId: { [Op.in]: sessionIds } },
+                        attributes: ['status'],
+                    });
+
+                    const counts: Record<string, number> = { present: 0, absent: 0, sick: 0, permission: 0, late: 0 };
+                    for (const a of attendances as any[]) {
+                        if (counts[a.status] !== undefined) counts[a.status]++;
+                    }
+                    const total = attendances.length;
+                    const pct = total > 0 ? Math.round(((counts.present + counts.late) / total) * 100) : 0;
+
+                    classTotalPresent += counts.present;
+                    classTotalLate += counts.late;
+                    classTotalSick += counts.sick;
+                    classTotalPermission += counts.permission;
+                    classTotalAbsent += counts.absent;
+
+                    rows.push({
+                        'NIS': student.nis || '-',
+                        'Nama': student.name,
+                        'JK': student.gender === 'M' ? 'L' : 'P',
+                        'Kelas': cls.name,
+                        'Hadir': counts.present,
+                        'Terlambat': counts.late,
+                        'Sakit': counts.sick,
+                        'Izin': counts.permission,
+                        'Absen': counts.absent,
+                        'Kehadiran (%)': `${pct}%`,
+                    });
                 }
-                const total = attendances.length;
+
+                // Class subtotal row
+                const classTotal = classTotalPresent + classTotalLate + classTotalSick + classTotalPermission + classTotalAbsent;
+                const classPct = classTotal > 0 ? Math.round(((classTotalPresent + classTotalLate) / classTotal) * 100) : 0;
                 rows.push({
-                    Kelas: cls.name,
-                    'Jml Siswa': studentIds.length,
-                    'Jml Sesi': sessionIds.length,
-                    Hadir: counts.present,
-                    Terlambat: counts.late,
-                    Sakit: counts.sick,
-                    Izin: counts.permission,
-                    Absen: counts.absent,
-                    'Persentase': total > 0 ? `${Math.round(((counts.present + counts.late) / total) * 100)}%` : '0%',
+                    'NIS': '',
+                    'Nama': `Subtotal ${cls.name} (${studentIds.length} siswa)`,
+                    'JK': '',
+                    'Kelas': cls.name,
+                    'Hadir': classTotalPresent,
+                    'Terlambat': classTotalLate,
+                    'Sakit': classTotalSick,
+                    'Izin': classTotalPermission,
+                    'Absen': classTotalAbsent,
+                    'Kehadiran (%)': `${classPct}%`,
                 });
             }
             sheetName = 'Rekap Siswa';

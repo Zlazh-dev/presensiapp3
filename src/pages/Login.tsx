@@ -2,15 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
-import { Loader2, Eye, EyeOff, Users, LogIn } from 'lucide-react';
-
-interface TestUser {
-    id: number;
-    username: string;
-    email: string | null;
-    role: string;
-    name: string;
-}
+import { Loader2, Eye, EyeOff, User, Lock, Mail } from 'lucide-react';
 
 const Login: React.FC = () => {
     const [identifier, setIdentifier] = useState('');
@@ -18,8 +10,6 @@ const Login: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const [testUsers, setTestUsers] = useState<TestUser[] | null>(null);
-    const [loadingTestUsers, setLoadingTestUsers] = useState(false);
 
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -32,18 +22,14 @@ const Login: React.FC = () => {
         try {
             const response = await api.post('/auth/login', { identifier, password });
             const { token, user } = response.data;
-
-            // Store in AuthContext + localStorage
             login(token, user);
 
-            // Navigate based on role
             if (user.role === 'admin') {
-                navigate('/admin-dashboard');
+                navigate('/dashboard');
             } else {
                 navigate('/dashboard-guru');
             }
         } catch (err: any) {
-            // Show exact error from backend
             const message = err.response?.data?.error || err.message || 'Login failed';
             setError(message);
         } finally {
@@ -51,169 +37,170 @@ const Login: React.FC = () => {
         }
     };
 
-    const fetchTestUsers = async () => {
-        setLoadingTestUsers(true);
-        try {
-            const response = await api.get('/auth/test-users');
-            setTestUsers(response.data.users);
-        } catch (err: any) {
-            setError('Failed to fetch test users: ' + (err.response?.data?.error || err.message));
-        } finally {
-            setLoadingTestUsers(false);
-        }
-    };
-
-    const fillCredentials = (username: string) => {
-        setIdentifier(username);
-        // Default password for seeded users
-        setPassword(username === 'admin' ? 'admin123' : 'guru123');
-    };
-
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                {/* Logo/Header */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 rounded-2xl mb-4">
-                        <LogIn className="w-8 h-8 text-white" />
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+            <div className="w-full max-w-[960px] min-h-[540px] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col lg:flex-row">
+
+                {/* ─── Left Panel: Dark Branding ─── */}
+                <div className="relative lg:w-[55%] bg-gray-950 flex flex-col justify-between p-8 lg:p-10 overflow-hidden min-h-[200px] lg:min-h-0">
+                    {/* Abstract animated background */}
+                    <div className="absolute inset-0 overflow-hidden">
+                        {/* Gradient blobs */}
+                        <div className="absolute -top-20 -left-20 w-80 h-80 bg-gradient-to-br from-gray-700/40 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }} />
+                        <div className="absolute bottom-10 -right-10 w-72 h-72 bg-gradient-to-tl from-gray-600/30 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }} />
+                        <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-gradient-to-r from-white/5 to-transparent rounded-full blur-2xl animate-pulse" style={{ animationDuration: '5s' }} />
+
+                        {/* Abstract chrome-like curves using SVG */}
+                        <svg className="absolute inset-0 w-full h-full opacity-40" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="chrome1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stopColor="#fff" stopOpacity="0.1" />
+                                    <stop offset="40%" stopColor="#ccc" stopOpacity="0.3" />
+                                    <stop offset="60%" stopColor="#fff" stopOpacity="0.05" />
+                                    <stop offset="100%" stopColor="#999" stopOpacity="0.2" />
+                                </linearGradient>
+                                <linearGradient id="chrome2" x1="100%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" stopColor="#ddd" stopOpacity="0.15" />
+                                    <stop offset="50%" stopColor="#fff" stopOpacity="0.25" />
+                                    <stop offset="100%" stopColor="#888" stopOpacity="0.1" />
+                                </linearGradient>
+                            </defs>
+                            {/* Flowing chrome curves */}
+                            <path d="M-50,150 C100,80 150,300 300,200 S450,350 550,250" stroke="url(#chrome1)" strokeWidth="28" strokeLinecap="round" fill="none">
+                                <animate attributeName="d" dur="8s" repeatCount="indefinite" values="
+                                    M-50,150 C100,80 150,300 300,200 S450,350 550,250;
+                                    M-50,200 C80,120 200,280 320,180 S480,320 550,220;
+                                    M-50,150 C100,80 150,300 300,200 S450,350 550,250
+                                " />
+                            </path>
+                            <path d="M-30,300 C120,220 180,400 340,320 S480,420 560,350" stroke="url(#chrome2)" strokeWidth="22" strokeLinecap="round" fill="none">
+                                <animate attributeName="d" dur="10s" repeatCount="indefinite" values="
+                                    M-30,300 C120,220 180,400 340,320 S480,420 560,350;
+                                    M-30,340 C100,260 220,380 360,300 S500,400 560,320;
+                                    M-30,300 C120,220 180,400 340,320 S480,420 560,350
+                                " />
+                            </path>
+                            <path d="M50,420 C150,340 250,480 400,380 S520,450 600,400" stroke="url(#chrome1)" strokeWidth="16" strokeLinecap="round" fill="none" opacity="0.6">
+                                <animate attributeName="d" dur="7s" repeatCount="indefinite" values="
+                                    M50,420 C150,340 250,480 400,380 S520,450 600,400;
+                                    M50,450 C130,370 270,460 420,360 S540,430 600,380;
+                                    M50,420 C150,340 250,480 400,380 S520,450 600,400
+                                " />
+                            </path>
+                            {/* Metallic accent circles */}
+                            <circle cx="100" cy="100" r="45" stroke="url(#chrome2)" strokeWidth="3" fill="none" opacity="0.3">
+                                <animate attributeName="r" dur="6s" repeatCount="indefinite" values="45;55;45" />
+                            </circle>
+                            <circle cx="380" cy="140" r="30" stroke="url(#chrome1)" strokeWidth="2" fill="none" opacity="0.2">
+                                <animate attributeName="r" dur="5s" repeatCount="indefinite" values="30;38;30" />
+                            </circle>
+                        </svg>
                     </div>
-                    <h1 className="text-3xl font-bold text-white">Presensi App</h1>
-                    <p className="text-blue-200 mt-2">Teacher Attendance System</p>
+
+                    {/* Branding top */}
+                    <div className="relative z-10">
+                        <h1 className="text-white text-2xl lg:text-3xl font-bold italic tracking-tight">
+                            PresensiApp.
+                        </h1>
+                    </div>
+
+                    {/* Welcome text bottom */}
+                    <div className="relative z-10 mt-auto pt-8">
+                        <h2 className="text-white text-3xl lg:text-5xl font-extrabold leading-tight">
+                            Welcome<br />Back!
+                        </h2>
+                        <p className="text-gray-400 text-sm mt-3 max-w-xs">
+                            Sistem Presensi Digital — Login untuk melanjutkan
+                        </p>
+                    </div>
                 </div>
 
-                {/* Login Card */}
-                <div className="bg-white rounded-2xl shadow-2xl p-8">
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* Identifier Input */}
-                        <div>
-                            <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-2">
-                                Identifier (username or email)
-                            </label>
+                {/* ─── Right Panel: Login Form ─── */}
+                <div className="lg:w-[45%] flex flex-col justify-center px-8 lg:px-12 py-10 lg:py-0">
+                    {/* Title */}
+                    <h2 className="text-3xl lg:text-4xl font-extrabold text-gray-900 mb-8">
+                        Log in
+                    </h2>
+
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        {/* Username / Email Input */}
+                        <div className="relative">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                                {identifier.includes('@') ? <Mail className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                            </div>
                             <input
                                 id="identifier"
                                 type="text"
                                 value={identifier}
                                 onChange={(e) => setIdentifier(e.target.value)}
-                                placeholder="guru1 or guru1@example.com"
-                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
+                                placeholder="Username atau Email"
+                                className="w-full pl-11 pr-4 py-3.5 bg-gray-100 rounded-xl border-0 text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:bg-white transition-all outline-none text-sm"
                                 required
                                 autoComplete="username"
                             />
                         </div>
 
                         {/* Password Input */}
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                                Password
-                            </label>
-                            <div className="relative">
-                                <input
-                                    id="password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none pr-12"
-                                    required
-                                    autoComplete="current-password"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                >
-                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                </button>
+                        <div className="relative">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                                <Lock className="w-4 h-4" />
                             </div>
+                            <input
+                                id="password"
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Password"
+                                className="w-full pl-11 pr-12 py-3.5 bg-gray-100 rounded-xl border-0 text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:bg-white transition-all outline-none text-sm"
+                                required
+                                autoComplete="current-password"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                                tabIndex={-1}
+                            >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
                         </div>
 
-                        {/* Error Message */}
+                        {/* Error */}
                         {error && (
-                            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                            <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium">
                                 {error}
                             </div>
                         )}
 
-                        {/* Submit Button */}
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                        >
-                            {loading ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Signing in...
-                                </>
-                            ) : (
-                                'Sign In'
-                            )}
-                        </button>
+                        {/* Login Button */}
+                        <div className="pt-2">
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full bg-gray-900 text-white py-3.5 rounded-full font-semibold hover:bg-gray-800 active:scale-[0.98] disabled:bg-gray-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-gray-900/20"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Signing in...
+                                    </>
+                                ) : (
+                                    'Log in'
+                                )}
+                            </button>
+                        </div>
                     </form>
 
-                    {/* Test Backend Button */}
-                    <div className="mt-6 pt-6 border-t border-gray-200">
-                        <button
-                            onClick={fetchTestUsers}
-                            disabled={loadingTestUsers}
-                            className="w-full bg-gray-100 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm"
-                        >
-                            {loadingTestUsers ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <Users className="w-4 h-4" />
-                            )}
-                            Test Backend - Show Seeded Users
-                        </button>
+                    {/* Hint */}
+                    <p className="text-gray-400 text-xs text-center mt-5">
+                        Gunakan <span className="font-medium text-gray-500">username</span> atau <span className="font-medium text-gray-500">email</span> untuk masuk
+                    </p>
 
-                        {/* Test Users Table */}
-                        {testUsers && testUsers.length > 0 && (
-                            <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-3 py-2 text-left font-medium text-gray-600">Username</th>
-                                            <th className="px-3 py-2 text-left font-medium text-gray-600">Role</th>
-                                            <th className="px-3 py-2 text-left font-medium text-gray-600">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {testUsers.map((user) => (
-                                            <tr key={user.id} className="hover:bg-gray-50">
-                                                <td className="px-3 py-2">
-                                                    <div className="font-medium">{user.username}</div>
-                                                    <div className="text-xs text-gray-400">{user.email || '—'}</div>
-                                                </td>
-                                                <td className="px-3 py-2">
-                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
-                                                        }`}>
-                                                        {user.role}
-                                                    </span>
-                                                </td>
-                                                <td className="px-3 py-2">
-                                                    <button
-                                                        onClick={() => fillCredentials(user.username)}
-                                                        className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                                                    >
-                                                        Use →
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                <div className="px-3 py-2 bg-yellow-50 text-xs text-yellow-700">
-                                    💡 Passwords: <code className="bg-yellow-100 px-1 rounded">admin123</code> for admin, <code className="bg-yellow-100 px-1 rounded">guru123</code> for teachers
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    {/* Footer */}
+                    <p className="text-gray-400 text-xs text-center mt-4">
+                        © 2026 PresensiApp. All rights reserved.
+                    </p>
                 </div>
-
-                {/* Footer */}
-                <p className="text-center text-blue-200 text-sm mt-6">
-                    © 2026 Presensi App. All rights reserved.
-                </p>
             </div>
         </div>
     );

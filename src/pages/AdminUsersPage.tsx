@@ -117,7 +117,7 @@ const AdminUsersPage: React.FC = () => {
       refetch();
     },
     onError: (error: any) => {
-      showToast(error.response?.data?.message || 'Gagal menambahkan user', 'error');
+      showToast(error.response?.data?.error || error.response?.data?.message || 'Gagal menambahkan user', 'error');
     },
   });
 
@@ -132,7 +132,7 @@ const AdminUsersPage: React.FC = () => {
       refetch();
     },
     onError: (error: any) => {
-      showToast(error.response?.data?.message || 'Gagal mengupdate user', 'error');
+      showToast(error.response?.data?.error || error.response?.data?.message || 'Gagal mengupdate user', 'error');
     },
   });
 
@@ -277,10 +277,10 @@ const AdminUsersPage: React.FC = () => {
   ) || [];
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Manajemen User</h1>
-        <p className="text-gray-600 mt-1">Kelola pengguna sistem (Admin dan Guru)</p>
+    <div className="p-4 sm:p-6">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Manajemen User</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">Kelola pengguna sistem (Admin dan Guru)</p>
       </div>
 
       {/* Toast Notification */}
@@ -292,10 +292,10 @@ const AdminUsersPage: React.FC = () => {
       )}
 
       {/* Add User Form */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
         <div className="flex items-center gap-2 mb-4">
-          <Users className="w-5 h-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Tambah User Baru</h2>
+          <Users className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900">Tambah User Baru</h2>
         </div>
 
         <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-4">
@@ -476,7 +476,7 @@ const AdminUsersPage: React.FC = () => {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Daftar User</h2>
           <div className="relative w-full sm:w-64">
@@ -502,7 +502,7 @@ const AdminUsersPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Nama / Username</th>

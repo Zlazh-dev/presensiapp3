@@ -3,13 +3,7 @@ import QRCode from 'qrcode';
 import { TeacherWorkingHours, TeacherAttendance, Teacher, Geofence } from '../models';
 import { calculateDistance } from '../utils/geofence';
 import { getIO } from '../socket';
-
-// ─── Jakarta timezone helper ───────────────────────────
-function getJakartaNow() {
-    const now = new Date();
-    const jakartaStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
-    return new Date(jakartaStr);
-}
+import { getJakartaNow } from '../utils/date';
 
 function timeToMinutes(time: string): number {
     const [h, m] = time.split(':').map(Number);
@@ -148,24 +142,15 @@ export const scanGuruRegular = async (req: Request, res: Response): Promise<void
         if (!existing || !existing.checkInTime) {
             // === CHECKIN ===
             const windowOpen = startMins - toleranceBefore;
-            const windowClose = startMins + lateAfterMin + 15; // 15min grace after late threshold
 
             if (nowMins < windowOpen) {
                 res.status(400).json({
                     error: `Terlalu awal. Check-in dibuka pukul ${minutesToTime(windowOpen)}`,
                     windowStart: minutesToTime(windowOpen),
-                    windowEnd: minutesToTime(windowClose),
                 });
                 return;
             }
-            if (nowMins > windowClose) {
-                res.status(400).json({
-                    error: `Sudah lewat batas waktu check-in (${minutesToTime(windowClose)})`,
-                    windowStart: minutesToTime(windowOpen),
-                    windowEnd: minutesToTime(windowClose),
-                });
-                return;
-            }
+            // No upper time limit — late check-ins are allowed and marked as 'late'
 
             // Determine status + lateMinutes
             const lateThreshold = startMins + lateAfterMin;

@@ -16,6 +16,7 @@ router.put('/:id', authenticate, authorize('admin'), scheduleController.updateSc
 router.delete('/:id', authenticate, authorize('admin'), scheduleController.deleteSchedule);
 
 // New: Grid / Bulk / Export / Import
+router.post('/bulk-delete', authenticate, authorize('admin'), scheduleController.bulkDeleteSchedules);
 router.get('/:classId/grid', authenticate, scheduleController.getScheduleGrid);
 router.post('/:classId/bulk', authenticate, authorize('admin'), scheduleController.bulkAssign);
 router.post('/:classId/export-template', authenticate, scheduleController.exportTemplate);

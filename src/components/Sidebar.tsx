@@ -7,8 +7,6 @@ import {
     UserCheck,
     ClipboardList,
     Settings,
-    ScanLine,
-    User,
     LogOut,
     ChevronLeft,
     ChevronRight,
@@ -54,9 +52,7 @@ const Sidebar: React.FC = () => {
     const teacherItems: SidebarItem[] = [
         { label: 'Dashboard', path: '/dashboard-guru', icon: LayoutDashboard },
         { label: 'Sesi Mengajar', path: '/sesi-mengajar', icon: BookOpen },
-        { label: 'Jadwal Saya', path: '/jadwal', icon: Calendar },
-        { label: 'Rekap Kehadiran', path: '/rekap', icon: ClipboardList },
-        { label: 'Pengaturan', path: '/settings', icon: Settings },
+        { label: 'Rekap Kehadiran', path: '/guru/rekap', icon: ClipboardList },
     ];
 
     const isTeacher = user?.role === 'teacher' || user?.role === 'guru';
@@ -65,13 +61,24 @@ const Sidebar: React.FC = () => {
     const SidebarContent = () => (
         <div className="flex flex-col h-full">
             {/* Logo */}
-            <div className="flex items-center gap-3 px-4 h-16 border-b border-gray-200">
-                <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold text-lg">P</span>
+            <div className="flex items-center justify-between px-5 h-16">
+                <div className="flex items-center gap-3">
+                    {!collapsed && (
+                        <span className="font-bold text-white text-lg italic tracking-tight">
+                            PresensiApp.
+                        </span>
+                    )}
+                    {collapsed && (
+                        <span className="text-white font-bold text-lg">P.</span>
+                    )}
                 </div>
-                {!collapsed && (
-                    <span className="font-semibold text-gray-900 text-lg">Presensi</span>
-                )}
+                {/* Close button — mobile only */}
+                <button
+                    onClick={() => setMobileOpen(false)}
+                    className="lg:hidden p-2 -mr-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                >
+                    <X className="w-5 h-5" />
+                </button>
             </div>
 
             {/* Menu Items */}
@@ -81,29 +88,29 @@ const Sidebar: React.FC = () => {
                         key={item.path}
                         to={item.path}
                         onClick={() => setMobileOpen(false)}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive(item.path)
-                            ? 'bg-blue-50 text-blue-700 shadow-sm'
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${isActive(item.path)
+                            ? 'bg-white text-gray-900 shadow-lg shadow-black/20'
+                            : 'text-gray-400 hover:bg-white/10 hover:text-white'
                             }`}
                         title={collapsed ? item.label : undefined}
                     >
-                        <item.icon className={`w-5 h-5 flex-shrink-0 ${isActive(item.path) ? 'text-blue-600' : ''}`} />
+                        <item.icon className={`w-5 h-5 flex-shrink-0 ${isActive(item.path) ? 'text-gray-900' : ''}`} />
                         {!collapsed && <span>{item.label}</span>}
                     </Link>
                 ))}
             </nav>
 
             {/* User Section */}
-            <div className="border-t border-gray-200 p-3">
+            <div className="border-t border-white/10 p-3">
                 {!collapsed && (
                     <div className="px-3 py-2 mb-2">
-                        <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
+                        <p className="text-sm font-medium text-white truncate">{user?.name}</p>
                         <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
                     </div>
                 )}
                 <button
                     onClick={handleLogout}
-                    className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors ${collapsed ? 'justify-center' : ''
+                    className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:bg-red-500/20 hover:text-red-400 transition-colors ${collapsed ? 'justify-center' : ''
                         }`}
                     title="Logout"
                 >
@@ -115,7 +122,7 @@ const Sidebar: React.FC = () => {
             {/* Collapse Toggle - Desktop */}
             <button
                 onClick={() => setCollapsed(!collapsed)}
-                className="hidden lg:flex items-center justify-center w-full py-3 border-t border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+                className="hidden lg:flex items-center justify-center w-full py-3 border-t border-white/10 text-gray-500 hover:text-white hover:bg-white/5 transition-colors"
             >
                 {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
             </button>
@@ -125,16 +132,13 @@ const Sidebar: React.FC = () => {
     return (
         <>
             {/* Mobile Header Bar */}
-            <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 z-40">
+            <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-gray-950 flex items-center justify-between px-4 z-40">
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                        <span className="text-white font-bold text-sm">P</span>
-                    </div>
-                    <span className="font-semibold text-gray-900">Presensi</span>
+                    <span className="font-bold text-white italic tracking-tight">PresensiApp.</span>
                 </div>
                 <button
                     onClick={() => setMobileOpen(!mobileOpen)}
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                    className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                 >
                     {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                 </button>
@@ -143,14 +147,14 @@ const Sidebar: React.FC = () => {
             {/* Mobile Backdrop */}
             {mobileOpen && (
                 <div
-                    className="lg:hidden fixed inset-0 bg-black/50 z-40"
+                    className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[55]"
                     onClick={() => setMobileOpen(false)}
                 />
             )}
 
-            {/* Mobile Sidebar */}
+            {/* Mobile Sidebar — full width, full height */}
             <aside
-                className={`lg:hidden fixed top-14 left-0 bottom-0 w-64 bg-white border-r border-gray-200 z-50 transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'
+                className={`lg:hidden fixed inset-0 w-full bg-gray-950 z-[60] transform transition-transform duration-300 ease-out ${mobileOpen ? 'translate-x-0' : '-translate-x-full'
                     }`}
             >
                 <SidebarContent />
@@ -158,15 +162,14 @@ const Sidebar: React.FC = () => {
 
             {/* Desktop Sidebar */}
             <aside
-                className={`hidden lg:flex flex-col fixed top-0 left-0 bottom-0 bg-white border-r border-gray-200 z-30 transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'
+                className={`hidden lg:flex flex-col fixed top-0 left-0 bottom-0 bg-gray-950 z-30 transition-all duration-200 ${collapsed ? 'w-16' : 'w-60'
                     }`}
             >
                 <SidebarContent />
             </aside>
 
-            {/* Spacer for main content */}
-            <div className={`hidden lg:block flex-shrink-0 transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`} />
-            <div className="lg:hidden h-14" /> {/* Mobile header spacer */}
+            {/* Spacer for main content — desktop only */}
+            <div className={`hidden lg:block flex-shrink-0 transition-all duration-200 ${collapsed ? 'w-16' : 'w-60'}`} />
         </>
     );
 };

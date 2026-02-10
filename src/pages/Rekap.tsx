@@ -145,13 +145,13 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 const StatCard: React.FC<{ label: string; value: string | number; icon: React.ReactNode; color: string }> = ({
     label, value, icon, color,
 }) => (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+    <div className="bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between">
-            <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+            <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide truncate">{label}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{value}</p>
             </div>
-            <div className={`p-3 rounded-xl ${color}`}>
+            <div className={`p-2.5 sm:p-3 rounded-xl ${color} flex-shrink-0`}>
                 {icon}
             </div>
         </div>
@@ -209,18 +209,18 @@ const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) =
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-amber-500" />
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm sm:text-base">
+                        <ClipboardList className="w-4 h-4 text-amber-500 flex-shrink-0" />
                         Kehadiran Reguler — {rows.length} data
                     </h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         {/* Guru filter dropdown */}
                         <select
                             value={selectedGuruId}
                             onChange={(e) => setSelectedGuruId(e.target.value)}
-                            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none"
+                            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none flex-1 sm:flex-none min-w-0"
                         >
                             <option value="">Semua Guru</option>
                             {teachers.map((t) => (
@@ -235,7 +235,7 @@ const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) =
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition disabled:opacity-40"
                         >
                             <FileText className="w-3.5 h-3.5" />
-                            Cetak PDF
+                            <span className="hidden sm:inline">Cetak</span> PDF
                         </button>
 
                         {/* Excel Export */}
@@ -244,7 +244,7 @@ const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) =
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition"
                         >
                             <Download className="w-3.5 h-3.5" />
-                            Export Excel
+                            Excel
                         </button>
                     </div>
                 </div>
@@ -260,7 +260,7 @@ const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) =
                 </div>
             ) : (
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm min-w-[700px]">
                         <thead>
                             <tr className="bg-gray-50/80">
                                 <th className="px-5 py-3 text-left font-semibold text-gray-600">Tanggal</th>
@@ -360,21 +360,18 @@ const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) 
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-emerald-500" />
-                        Kehadiran Mengajar (KBM) — {rows.length} sesi
-                        <span className="text-xs text-gray-400 font-normal ml-2">
-                            Source: sessions table
-                        </span>
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm sm:text-base">
+                        <BookOpen className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                        <span>Mengajar (KBM) — {rows.length} sesi</span>
                     </h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         {/* Guru filter dropdown */}
                         <select
                             value={selectedGuruId}
                             onChange={(e) => setSelectedGuruId(e.target.value)}
-                            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none"
+                            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none flex-1 sm:flex-none min-w-0"
                         >
                             <option value="">Semua Guru</option>
                             {teachers.map((t) => (
@@ -389,7 +386,7 @@ const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) 
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition disabled:opacity-40"
                         >
                             <FileText className="w-3.5 h-3.5" />
-                            Cetak PDF
+                            PDF
                         </button>
                     </div>
                 </div>
@@ -405,7 +402,7 @@ const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) 
                 </div>
             ) : (
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm min-w-[650px]">
                         <thead>
                             <tr className="bg-gray-50/80">
                                 <th className="px-5 py-3 text-left font-semibold text-gray-600">Tanggal</th>
@@ -546,20 +543,20 @@ const GuruPerKelas: React.FC<{ start: string; end: string }> = ({ start, end }) 
                 classes.map((cls) => (
                     <div key={cls.classId} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                         <button
-                            className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50/50 transition"
+                            className="w-full px-4 sm:px-5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 hover:bg-gray-50/50 transition text-left"
                             onClick={() => setExpanded(expanded === cls.classId ? null : cls.classId)}
                         >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 sm:gap-3">
                                 {expanded === cls.classId
-                                    ? <ChevronDown className="w-5 h-5 text-gray-400" />
-                                    : <ChevronRight className="w-5 h-5 text-gray-400" />
+                                    ? <ChevronDown className="w-4 sm:w-5 h-4 sm:h-5 text-gray-400 flex-shrink-0" />
+                                    : <ChevronRight className="w-4 sm:w-5 h-4 sm:h-5 text-gray-400 flex-shrink-0" />
                                 }
-                                <span className="font-bold text-gray-900">{cls.className}</span>
-                                <span className="text-sm text-gray-500">{cls.totalSessions} sesi</span>
+                                <span className="font-bold text-gray-900 text-sm sm:text-base">{cls.className}</span>
+                                <span className="text-xs sm:text-sm text-gray-500">{cls.totalSessions} sesi</span>
                             </div>
-                            <div className="flex items-center gap-4 text-sm">
-                                <span className="text-emerald-600 font-medium">{cls.attended} hadir</span>
-                                <span className="text-red-500 font-medium">{cls.absent} absen</span>
+                            <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm pl-6 sm:pl-0">
+                                <span className="text-emerald-600 font-medium">{cls.attended} <span className="hidden sm:inline">hadir</span></span>
+                                <span className="text-red-500 font-medium">{cls.absent} <span className="hidden sm:inline">absen</span></span>
                                 <span className={`font-bold ${cls.percentage >= 80 ? 'text-emerald-600' : 'text-red-500'}`}>
                                     {cls.percentage}%
                                 </span>
@@ -567,7 +564,7 @@ const GuruPerKelas: React.FC<{ start: string; end: string }> = ({ start, end }) 
                         </button>
                         {expanded === cls.classId && (
                             <div className="border-t border-gray-100 overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <table className="w-full text-sm min-w-[500px]">
                                     <thead>
                                         <tr className="bg-gray-50/80">
                                             <th className="px-5 py-2 text-left font-medium text-gray-500">Tanggal</th>
@@ -602,6 +599,7 @@ const GuruPerKelas: React.FC<{ start: string; end: string }> = ({ start, end }) 
 // ─── Siswa Tab ───────────────────────────────────────────
 const SiswaTab: React.FC<{ start: string; end: string }> = ({ start, end }) => {
     const [expandedClass, setExpandedClass] = useState<number | null>(null);
+    const [exportingPDF, setExportingPDF] = useState(false);
 
     const { data: summaryData, isLoading: loadingSummary } = useQuery({
         queryKey: ['siswa-summary', start, end],
@@ -618,10 +616,162 @@ const SiswaTab: React.FC<{ start: string; end: string }> = ({ start, end }) => {
     const classes: SiswaSummary[] = summaryData?.classes || [];
     const students: SiswaDetail[] = detailData?.students || [];
 
+    // ─── PDF Export Handler ──────────────────────────────
+    const handleExportPDF = async () => {
+        if (classes.length === 0) return;
+        setExportingPDF(true);
+
+        try {
+            // Fetch detail for ALL classes
+            const allClassDetails: { cls: SiswaSummary; students: SiswaDetail[] }[] = [];
+            for (const cls of classes) {
+                const data = await apiFetch(`/api/attendance/siswa/${cls.classId}/detail?start=${start}&end=${end}`);
+                allClassDetails.push({ cls, students: (data?.students || []).sort((a: SiswaDetail, b: SiswaDetail) => a.name.localeCompare(b.name)) });
+            }
+
+            const doc = new jsPDF({ orientation: 'landscape' });
+            const pageWidth = doc.internal.pageSize.getWidth();
+
+            // ── Header ──
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Rekap Kehadiran Siswa', pageWidth / 2, 15, { align: 'center' });
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Periode: ${start} s/d ${end}`, pageWidth / 2, 22, { align: 'center' });
+            doc.text(`Dicetak: ${format(new Date(), 'dd MMMM yyyy, HH:mm', { locale: localeId })}`, pageWidth / 2, 28, { align: 'center' });
+
+            let startY = 35;
+
+            // ── Per-class tables ──
+            for (let i = 0; i < allClassDetails.length; i++) {
+                const { cls, students: sList } = allClassDetails[i];
+
+                // Class title
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text(`Kelas ${cls.className}  (${cls.totalStudents} siswa, ${cls.totalSessions || 0} sesi)`, 14, startY);
+                startY += 3;
+
+                const bodyRows = sList.map((s, idx) => [
+                    idx + 1,
+                    s.nis || '-',
+                    s.name,
+                    s.gender === 'M' ? 'L' : 'P',
+                    s.present,
+                    s.late,
+                    s.sick,
+                    s.permission,
+                    s.absent,
+                    `${s.percentage}%`,
+                ]);
+
+                // Class subtotal row
+                const totalPresent = sList.reduce((sum, s) => sum + s.present, 0);
+                const totalLate = sList.reduce((sum, s) => sum + s.late, 0);
+                const totalSick = sList.reduce((sum, s) => sum + s.sick, 0);
+                const totalPermission = sList.reduce((sum, s) => sum + s.permission, 0);
+                const totalAbsent = sList.reduce((sum, s) => sum + s.absent, 0);
+                const grandTotal = totalPresent + totalLate + totalSick + totalPermission + totalAbsent;
+                const classPct = grandTotal > 0 ? Math.round(((totalPresent + totalLate) / grandTotal) * 100) : 0;
+
+                bodyRows.push([
+                    '', '', `Total Kelas ${cls.className}`, '', totalPresent, totalLate, totalSick, totalPermission, totalAbsent, `${classPct}%`,
+                ]);
+
+                autoTable(doc, {
+                    startY,
+                    head: [['No', 'NIS', 'Nama', 'JK', 'Hadir', 'Terlambat', 'Sakit', 'Izin', 'Absen', '%']],
+                    body: bodyRows,
+                    styles: { fontSize: 8, cellPadding: 2 },
+                    headStyles: { fillColor: [16, 185, 129], textColor: 255, fontStyle: 'bold' },
+                    columnStyles: {
+                        0: { cellWidth: 12, halign: 'center' },
+                        1: { cellWidth: 25 },
+                        2: { cellWidth: 55 },
+                        3: { cellWidth: 12, halign: 'center' },
+                        4: { halign: 'center' },
+                        5: { halign: 'center' },
+                        6: { halign: 'center' },
+                        7: { halign: 'center' },
+                        8: { halign: 'center' },
+                        9: { halign: 'center' },
+                    },
+                    didParseCell: (data: any) => {
+                        // Bold the subtotal row
+                        if (data.row.index === bodyRows.length - 1) {
+                            data.cell.styles.fontStyle = 'bold';
+                            data.cell.styles.fillColor = [243, 244, 246];
+                        }
+                    },
+                });
+
+                startY = (doc as any).lastAutoTable.finalY + 10;
+
+                // Add page break if next class won't fit (leave 40mm margin)
+                if (i < allClassDetails.length - 1 && startY > doc.internal.pageSize.getHeight() - 40) {
+                    doc.addPage();
+                    startY = 15;
+                }
+            }
+
+            // ── Footer: Grand Summary ──
+            if (startY > doc.internal.pageSize.getHeight() - 50) {
+                doc.addPage();
+                startY = 15;
+            }
+
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Ringkasan Keseluruhan', 14, startY);
+            startY += 3;
+
+            const summaryRows = classes.map(cls => [
+                cls.className,
+                cls.totalStudents,
+                cls.totalSessions || 0,
+                cls.present,
+                cls.late,
+                cls.sick,
+                cls.permission,
+                cls.absent,
+                `${cls.percentage}%`,
+            ]);
+
+            autoTable(doc, {
+                startY,
+                head: [['Kelas', 'Siswa', 'Sesi', 'Hadir', 'Terlambat', 'Sakit', 'Izin', 'Absen', '%']],
+                body: summaryRows,
+                styles: { fontSize: 8, cellPadding: 2 },
+                headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+                columnStyles: {
+                    1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' },
+                    4: { halign: 'center' }, 5: { halign: 'center' }, 6: { halign: 'center' },
+                    7: { halign: 'center' }, 8: { halign: 'center' },
+                },
+            });
+
+            doc.save(`rekap_siswa_${start}_${end}.pdf`);
+        } catch (error) {
+            console.error('PDF export error:', error);
+            alert('Gagal mengekspor PDF. Silakan coba lagi.');
+        } finally {
+            setExportingPDF(false);
+        }
+    };
+
     return (
         <div className="space-y-3">
             {/* Export */}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+                <button
+                    onClick={handleExportPDF}
+                    disabled={exportingPDF || classes.length === 0}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {exportingPDF ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                    {exportingPDF ? 'Mengekspor...' : 'Export PDF'}
+                </button>
                 <button
                     onClick={() => apiDownload('/api/attendance/export/siswa-summary', { start, end }, `rekap_siswa_${start}_${end}.xlsx`)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition"
@@ -645,18 +795,18 @@ const SiswaTab: React.FC<{ start: string; end: string }> = ({ start, end }) => {
                     <div key={cls.classId} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                         {/* Class Header */}
                         <button
-                            className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50/50 transition"
+                            className="w-full px-4 sm:px-5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 hover:bg-gray-50/50 transition text-left"
                             onClick={() => setExpandedClass(expandedClass === cls.classId ? null : cls.classId)}
                         >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 sm:gap-3">
                                 {expandedClass === cls.classId
-                                    ? <ChevronDown className="w-5 h-5 text-gray-400" />
-                                    : <ChevronRight className="w-5 h-5 text-gray-400" />
+                                    ? <ChevronDown className="w-4 sm:w-5 h-4 sm:h-5 text-gray-400 flex-shrink-0" />
+                                    : <ChevronRight className="w-4 sm:w-5 h-4 sm:h-5 text-gray-400 flex-shrink-0" />
                                 }
-                                <span className="font-bold text-gray-900">Kelas {cls.className}</span>
-                                <span className="text-sm text-gray-500">{cls.totalStudents} siswa • {cls.totalSessions || 0} sesi</span>
+                                <span className="font-bold text-gray-900 text-sm sm:text-base">Kelas {cls.className}</span>
+                                <span className="text-xs sm:text-sm text-gray-500">{cls.totalStudents} siswa • {cls.totalSessions || 0} sesi</span>
                             </div>
-                            <div className="flex items-center gap-3 text-sm">
+                            <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm pl-6 sm:pl-0">
                                 <span className="text-emerald-600 font-medium">{cls.present} <span className="hidden sm:inline">hadir</span></span>
                                 <span className="text-amber-600 font-medium">{cls.late} <span className="hidden sm:inline">terlambat</span></span>
                                 <span className="text-red-500 font-medium">{cls.absent} <span className="hidden sm:inline">absen</span></span>
@@ -677,7 +827,7 @@ const SiswaTab: React.FC<{ start: string; end: string }> = ({ start, end }) => {
                                     <p className="text-center py-8 text-gray-400 text-sm">Tidak ada data siswa.</p>
                                 ) : (
                                     <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
+                                        <table className="w-full text-sm min-w-[600px]">
                                             <thead>
                                                 <tr className="bg-gray-50/80">
                                                     <th className="px-5 py-2 text-left font-medium text-gray-500">NIS</th>
@@ -772,20 +922,20 @@ const Rekap: React.FC = () => {
                 </div>
 
                 {/* Date Filter */}
-                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm">
-                    <Calendar className="w-4 h-4 text-gray-400" />
+                <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 shadow-sm w-full sm:w-auto">
+                    <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
                     <input
                         type="date"
                         value={dateRange.start}
                         onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                        className="px-2 py-1 border-0 text-sm focus:outline-none bg-transparent"
+                        className="px-1 sm:px-2 py-1 border-0 text-sm focus:outline-none bg-transparent min-w-0 flex-1 sm:flex-none"
                     />
                     <span className="text-gray-300">—</span>
                     <input
                         type="date"
                         value={dateRange.end}
                         onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                        className="px-2 py-1 border-0 text-sm focus:outline-none bg-transparent"
+                        className="px-1 sm:px-2 py-1 border-0 text-sm focus:outline-none bg-transparent min-w-0 flex-1 sm:flex-none"
                     />
                 </div>
             </div>
@@ -819,10 +969,10 @@ const Rekap: React.FC = () => {
             </div>
 
             {/* Main Tabs: Guru | Siswa */}
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-fit">
                 <button
                     onClick={() => setMainTab('guru')}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition ${mainTab === 'guru'
+                    className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition ${mainTab === 'guru'
                         ? 'bg-white text-gray-900 shadow-sm'
                         : 'text-gray-500 hover:text-gray-700'
                         }`}
@@ -832,7 +982,7 @@ const Rekap: React.FC = () => {
                 </button>
                 <button
                     onClick={() => setMainTab('siswa')}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition ${mainTab === 'siswa'
+                    className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition ${mainTab === 'siswa'
                         ? 'bg-white text-gray-900 shadow-sm'
                         : 'text-gray-500 hover:text-gray-700'
                         }`}
@@ -847,28 +997,28 @@ const Rekap: React.FC = () => {
                 <div className="space-y-4">
                     {/* Sub-tabs */}
                     {/* Sub-tabs */}
-                    <div className="flex gap-4 border-b border-gray-200 mb-4 px-1">
+                    <div className="flex gap-1 sm:gap-4 border-b border-gray-200 mb-4 px-1 overflow-x-auto scrollbar-hide">
                         <button
                             onClick={() => setGuruSubTab('reguler')}
-                            className={`px-3 pb-2 text-sm font-medium transition border-b-2 ${guruSubTab === 'reguler'
+                            className={`px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'reguler'
                                 ? 'border-amber-500 text-amber-700'
                                 : 'border-transparent text-gray-400 hover:text-gray-600'
                                 }`}
                         >
-                            Reguler (Briefing)
+                            Reguler
                         </button>
                         <button
                             onClick={() => setGuruSubTab('mengajar')}
-                            className={`px-3 pb-2 text-sm font-medium transition border-b-2 ${guruSubTab === 'mengajar'
+                            className={`px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'mengajar'
                                 ? 'border-emerald-500 text-emerald-700'
                                 : 'border-transparent text-gray-400 hover:text-gray-600'
                                 }`}
                         >
-                            Mengajar (KBM)
+                            Mengajar
                         </button>
                         <button
                             onClick={() => setGuruSubTab('kelas')}
-                            className={`px-3 pb-2 text-sm font-medium transition border-b-2 ${guruSubTab === 'kelas'
+                            className={`px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'kelas'
                                 ? 'border-blue-500 text-blue-700'
                                 : 'border-transparent text-gray-400 hover:text-gray-600'
                                 }`}

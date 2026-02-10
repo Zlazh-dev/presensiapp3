@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { getJakartaToday, getJakartaTime } from '../utils/date';
 import { Op } from 'sequelize';
 import { TeacherAttendance, StudentAttendance, User, Student, Teacher, Class, HolidayEvent, Geofence, TeacherWorkingHours, Session, Schedule } from '../models';
 import { AuthRequest } from '../middlewares/auth';
@@ -39,8 +40,8 @@ export const scanAttendance = async (
             }
         }
 
-        const today = new Date().toISOString().split('T')[0];
-        const currentTime = new Date().toTimeString().split(' ')[0];
+        const today = getJakartaToday();
+        const currentTime = getJakartaTime();
 
         // ── Holiday check ──
         const holidayWhere: any = {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, BookOpen, Plus, Trash2, Edit2, Search } from 'lucide-react';
-import { adminApi, type User as UserType, type Mapel, type CreateUserRequest, type CreateUserResponse, type CreateMapelRequest, type Guru, type Class as ClassType } from '../services/adminApi';
+import { Users, BookOpen, Plus, Trash2, Search } from 'lucide-react';
+import { adminApi, type User as UserType, type Mapel, type CreateUserRequest, type CreateMapelRequest, type Guru, type Class as ClassType } from '../services/adminApi';
 import { Modal } from '../components/ui/Modal';
 
 const AdminDashboard: React.FC = () => {
@@ -9,19 +9,21 @@ const AdminDashboard: React.FC = () => {
   const [showMapelModal, setShowMapelModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'user' | 'mapel'; id: number; name: string } | null>(null);
-  
+
   // User management state
   const [users, setUsers] = useState<UserType[]>([]);
   const [userForm, setUserForm] = useState<CreateUserRequest>({
     name: '',
+    username: '',
     role: 'teacher',
     email: '',
     nip: '',
+    password: '',
   });
   const [userValidation, setUserValidation] = useState<any>({});
-  const [generatedPassword, setGeneratedPassword] = useState('');
+  const [, setGeneratedPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Mapel management state
   const [mapel, setMapel] = useState<Mapel[]>([]);
   const [mapelForm, setMapelForm] = useState<CreateMapelRequest>({
@@ -32,23 +34,23 @@ const AdminDashboard: React.FC = () => {
   });
   const [mapelValidation, setMapelValidation] = useState<any>({});
   const [gurus, setGurus] = useState<Guru[]>([]);
-  const [classes, setClasses] = useState<ClassType[]>([]);
-  
+  const [, setClasses] = useState<ClassType[]>([]);
+
   // Search filters
   const [userSearch, setUserSearch] = useState('');
   const [mapelSearch, setMapelSearch] = useState('');
-  const [userRoleFilter, setUserRoleFilter] = useState<string>('');
-  
+  const [userRoleFilter] = useState<string>('');
+
   // Loading states
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingMapel, setLoadingMapel] = useState(false);
-  const [loadingGurus, setLoadingGurus] = useState(false);
-  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [, setLoadingGurus] = useState(false);
+  const [, setLoadingClasses] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  
+
   // Success message
   const [successMessage, setSuccessMessage] = useState('');
-  
+
   // Load data
   useEffect(() => {
     loadUsers();
@@ -56,7 +58,7 @@ const AdminDashboard: React.FC = () => {
     loadGurus();
     loadClasses();
   }, []);
-  
+
   const loadUsers = async () => {
     try {
       setLoadingUsers(true);
@@ -68,7 +70,7 @@ const AdminDashboard: React.FC = () => {
       setLoadingUsers(false);
     }
   };
-  
+
   const loadMapel = async () => {
     try {
       setLoadingMapel(true);
@@ -80,7 +82,7 @@ const AdminDashboard: React.FC = () => {
       setLoadingMapel(false);
     }
   };
-  
+
   const loadGurus = async () => {
     try {
       setLoadingGurus(true);
@@ -92,7 +94,7 @@ const AdminDashboard: React.FC = () => {
       setLoadingGurus(false);
     }
   };
-  
+
   const loadClasses = async () => {
     try {
       setLoadingClasses(true);
@@ -104,7 +106,7 @@ const AdminDashboard: React.FC = () => {
       setLoadingClasses(false);
     }
   };
-  
+
   // Validate user inputs in real-time
   const validateUserInput = async (field: 'nip' | 'email', value: string) => {
     try {
@@ -117,7 +119,7 @@ const AdminDashboard: React.FC = () => {
       console.error('Validation error:', error);
     }
   };
-  
+
   // Validate mapel inputs in real-time
   const validateMapelInput = async (field: 'name' | 'code', value: string) => {
     try {
@@ -130,28 +132,28 @@ const AdminDashboard: React.FC = () => {
       console.error('Validation error:', error);
     }
   };
-  
+
   // Handle user form submission
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Final validation
     if (userForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userForm.email)) {
       setUserValidation((prev: any) => ({ ...prev, email: 'Invalid email format' }));
       return;
     }
-    
+
     try {
       setSubmitting(true);
       const response = await adminApi.createUser(userForm);
       setGeneratedPassword(response.user.password);
       setShowPassword(true);
       setSuccessMessage(`User "${response.user.name}" created successfully! Password: ${response.user.password}`);
-      setUserForm({ name: '', role: 'teacher', email: '', nip: '' });
+      setUserForm({ name: '', username: '', role: 'teacher', email: '', nip: '', password: '' });
       setUserValidation({});
       setShowUserModal(false);
       loadUsers();
-      
+
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error: any) {
       console.error('Error creating user:', error);
@@ -160,11 +162,11 @@ const AdminDashboard: React.FC = () => {
       setSubmitting(false);
     }
   };
-  
+
   // Handle mapel form submission
   const handleMapelSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       setSubmitting(true);
       await adminApi.createMapel(mapelForm);
@@ -173,7 +175,7 @@ const AdminDashboard: React.FC = () => {
       setMapelValidation({});
       setShowMapelModal(false);
       loadMapel();
-      
+
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error: any) {
       console.error('Error creating mapel:', error);
@@ -182,11 +184,11 @@ const AdminDashboard: React.FC = () => {
       setSubmitting(false);
     }
   };
-  
+
   // Handle delete
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    
+
     try {
       setSubmitting(true);
       if (deleteTarget.type === 'user') {
@@ -200,7 +202,7 @@ const AdminDashboard: React.FC = () => {
       }
       setShowDeleteModal(false);
       setDeleteTarget(null);
-      
+
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error: any) {
       console.error('Error deleting:', error);
@@ -209,21 +211,21 @@ const AdminDashboard: React.FC = () => {
       setSubmitting(false);
     }
   };
-  
+
   // Filter users
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-                         user.email?.toLowerCase().includes(userSearch.toLowerCase()) ||
-                         user.teacher?.employeeId?.toLowerCase().includes(userSearch.toLowerCase());
+      user.email?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      user.teacher?.employeeId?.toLowerCase().includes(userSearch.toLowerCase());
     return matchesSearch;
   });
-  
+
   // Filter mapel
   const filteredMapel = mapel.filter(m => {
     return m.name.toLowerCase().includes(mapelSearch.toLowerCase()) ||
-           m.code.toLowerCase().includes(mapelSearch.toLowerCase());
+      m.code.toLowerCase().includes(mapelSearch.toLowerCase());
   });
-  
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -231,41 +233,39 @@ const AdminDashboard: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
         <p className="text-gray-500 mt-1">Manage users and mata pelajaran</p>
       </div>
-      
+
       {/* Success Message */}
       {successMessage && (
         <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
           {successMessage}
         </div>
       )}
-      
+
       {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors ${
-              activeTab === 'users'
+            className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors ${activeTab === 'users'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             <Users className="w-5 h-5" />
             Users
           </button>
           <button
             onClick={() => setActiveTab('mapel')}
-            className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors ${
-              activeTab === 'mapel'
+            className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors ${activeTab === 'mapel'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             <BookOpen className="w-5 h-5" />
             Mata Pelajaran
           </button>
         </div>
-        
+
         {/* Content */}
         <div className="p-6">
           {activeTab === 'users' ? (
@@ -289,13 +289,13 @@ const AdminDashboard: React.FC = () => {
           )}
         </div>
       </div>
-      
+
       {/* Add User Modal */}
       <Modal
         isOpen={showUserModal}
         onClose={() => {
           setShowUserModal(false);
-          setUserForm({ name: '', role: 'teacher', email: '', nip: '' });
+          setUserForm({ name: '', username: '', role: 'teacher', email: '', nip: '', password: '' });
           setUserValidation({});
         }}
         title="Add New User"
@@ -311,7 +311,7 @@ const AdminDashboard: React.FC = () => {
               required
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
             <select
@@ -324,7 +324,7 @@ const AdminDashboard: React.FC = () => {
               <option value="admin">Admin</option>
             </select>
           </div>
-          
+
           {userForm.role === 'teacher' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">NIP</label>
@@ -335,16 +335,15 @@ const AdminDashboard: React.FC = () => {
                   setUserForm({ ...userForm, nip: e.target.value });
                   if (e.target.value) validateUserInput('nip', e.target.value);
                 }}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  userValidation.nip ? 'border-red-300' : 'border-gray-300'
-                }`}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${userValidation.nip ? 'border-red-300' : 'border-gray-300'
+                  }`}
               />
               {userValidation.nip && (
                 <p className="text-red-600 text-sm mt-1">{userValidation.nip}</p>
               )}
             </div>
           )}
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
@@ -354,15 +353,14 @@ const AdminDashboard: React.FC = () => {
                 setUserForm({ ...userForm, email: e.target.value });
                 if (e.target.value) validateUserInput('email', e.target.value);
               }}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                userValidation.email ? 'border-red-300' : 'border-gray-300'
-              }`}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${userValidation.email ? 'border-red-300' : 'border-gray-300'
+                }`}
             />
             {userValidation.email && (
               <p className="text-red-600 text-sm mt-1">{userValidation.email}</p>
             )}
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password (leave empty to auto-generate)</label>
             <div className="relative">
@@ -374,11 +372,11 @@ const AdminDashboard: React.FC = () => {
               />
             </div>
           </div>
-          
+
           {userValidation.submit && (
             <p className="text-red-600 text-sm">{userValidation.submit}</p>
           )}
-          
+
           <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
@@ -397,7 +395,7 @@ const AdminDashboard: React.FC = () => {
           </div>
         </form>
       </Modal>
-      
+
       {/* Add Mapel Modal */}
       <Modal
         isOpen={showMapelModal}
@@ -418,16 +416,15 @@ const AdminDashboard: React.FC = () => {
                 setMapelForm({ ...mapelForm, name: e.target.value });
                 if (e.target.value) validateMapelInput('name', e.target.value);
               }}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                mapelValidation.name ? 'border-red-300' : 'border-gray-300'
-              }`}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${mapelValidation.name ? 'border-red-300' : 'border-gray-300'
+                }`}
               required
             />
             {mapelValidation.name && (
               <p className="text-red-600 text-sm mt-1">{mapelValidation.name}</p>
             )}
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Code (3-5 characters)</label>
             <input
@@ -438,16 +435,15 @@ const AdminDashboard: React.FC = () => {
                 setMapelForm({ ...mapelForm, code: value });
                 if (value) validateMapelInput('code', value);
               }}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                mapelValidation.code ? 'border-red-300' : 'border-gray-300'
-              }`}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${mapelValidation.code ? 'border-red-300' : 'border-gray-300'
+                }`}
               maxLength={5}
             />
             {mapelValidation.code && (
               <p className="text-red-600 text-sm mt-1">{mapelValidation.code}</p>
             )}
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Classes</label>
             <div className="grid grid-cols-3 gap-2">
@@ -471,7 +467,7 @@ const AdminDashboard: React.FC = () => {
               ))}
             </div>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Guru Pengajar</label>
             <select
@@ -487,11 +483,11 @@ const AdminDashboard: React.FC = () => {
               ))}
             </select>
           </div>
-          
+
           {mapelValidation.submit && (
             <p className="text-red-600 text-sm">{mapelValidation.submit}</p>
           )}
-          
+
           <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
@@ -510,7 +506,7 @@ const AdminDashboard: React.FC = () => {
           </div>
         </form>
       </Modal>
-      
+
       {/* Delete Confirmation Modal */}
       <Modal
         isOpen={showDeleteModal}
@@ -579,7 +575,7 @@ const UserManagement: React.FC<{
         Add User
       </button>
     </div>
-    
+
     {loading ? (
       <div className="text-center py-8 text-gray-500">Loading users...</div>
     ) : (
@@ -601,9 +597,8 @@ const UserManagement: React.FC<{
                 <td className="py-3 px-4">{user.teacher?.employeeId || '-'}</td>
                 <td className="py-3 px-4">{user.email || '-'}</td>
                 <td className="py-3 px-4">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                  }`}>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
                     {user.role}
                   </span>
                 </td>
@@ -660,7 +655,7 @@ const MataPelajaranManagement: React.FC<{
         Add Mata Pelajaran
       </button>
     </div>
-    
+
     {loading ? (
       <div className="text-center py-8 text-gray-500">Loading mata pelajaran...</div>
     ) : (

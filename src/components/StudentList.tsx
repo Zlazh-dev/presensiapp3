@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../lib/api';
+
 import { Loader2, Check, X, UserX, Clock } from 'lucide-react';
 
 interface Student {
@@ -44,7 +44,7 @@ const StudentList: React.FC<StudentListProps> = ({ sessionId }) => {
 
     // 2. Mutation for Student Attendance
     const mutation = useMutation({
-        mutationFn: async ({ studentId, status }: StudentAttendance) => {
+        mutationFn: async (_data: StudentAttendance) => {
             // POST /api/student-attendance
             // return api.post('/student-attendance', { sessionId, studentId, status });
 

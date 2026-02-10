@@ -204,3 +204,65 @@ export const toggleDay = async (req: Request, res: Response): Promise<void> => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+// PUT /api/working-hours/bulk-update — mass update all teachers
+export const bulkUpdate = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { TeacherWorkingHours, Teacher } = getModels();
+        const { days, startTime, endTime, toleranceBeforeMin, lateAfterMin } = req.body;
+
+        // Get all teacher IDs
+        const allTeachers = await Teacher.findAll({ attributes: ['id'] });
+        const teacherIds = allTeachers.map((t: any) => t.id);
+
+        if (!teacherIds.length) {
+            res.status(400).json({ error: 'No teachers found' });
+            return;
+        }
+
+        // If days array is provided, sync active days for all teachers
+        if (Array.isArray(days)) {
+            for (const tid of teacherIds) {
+                // Remove days NOT in the list
+                await TeacherWorkingHours.destroy({
+                    where: {
+                        teacherId: tid,
+                        dayOfWeek: { [Op.notIn]: days },
+                    },
+                });
+                // Upsert days that ARE in the list
+                for (const d of days) {
+                    await TeacherWorkingHours.findOrCreate({
+                        where: { teacherId: tid, dayOfWeek: d },
+                        defaults: {
+                            teacherId: tid,
+                            dayOfWeek: d,
+                            startTime: startTime || '07:00',
+                            endTime: endTime || '15:00',
+                            toleranceBeforeMin: toleranceBeforeMin ?? 30,
+                            lateAfterMin: lateAfterMin ?? 5,
+                        },
+                    });
+                }
+            }
+        }
+
+        // If time or tolerance fields are provided, update ALL existing records
+        const updateFields: any = {};
+        if (startTime !== undefined) updateFields.startTime = startTime;
+        if (endTime !== undefined) updateFields.endTime = endTime;
+        if (toleranceBeforeMin !== undefined) updateFields.toleranceBeforeMin = toleranceBeforeMin;
+        if (lateAfterMin !== undefined) updateFields.lateAfterMin = lateAfterMin;
+
+        if (Object.keys(updateFields).length > 0) {
+            await TeacherWorkingHours.update(updateFields, {
+                where: { teacherId: { [Op.in]: teacherIds } },
+            });
+        }
+
+        res.json({ message: 'Bulk update successful', teacherCount: teacherIds.length });
+    } catch (error) {
+        console.error('Bulk update error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};

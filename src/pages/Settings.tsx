@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import ConfirmModal from '../components/ConfirmModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
@@ -7,10 +8,11 @@ import {
     Trash2, Edit2, Loader2, AlertTriangle,
     CalendarOff, Grid3X3, RefreshCw, Upload, Download,
     Settings as SettingsIcon, CheckSquare, QrCode, Printer,
-    MapPin, Database, ShieldAlert,
+    MapPin, Database, ShieldAlert, HardDrive,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import GeofenceTab from '../components/GeofenceTab';
+import BackupTab from '../components/settings/BackupTab';
 
 // ─── Types ────────────────────────────────────────────
 interface TimeSlot {
@@ -102,6 +104,12 @@ const Settings: React.FC = () => {
     const [showCustomDayModal, setShowCustomDayModal] = useState(false);
     const [customDayForm, setCustomDayForm] = useState({ teacherId: 0, dayOfWeek: 7, startTime: '07:00', endTime: '15:00' });
 
+    // ── Mass setup state ──
+    const [massStartTime, setMassStartTime] = useState('07:00');
+    const [massEndTime, setMassEndTime] = useState('15:00');
+    const [massTolerance, setMassTolerance] = useState(30);
+    const [massLate, setMassLate] = useState(60);
+
     // ── QR state ──
     const [showQRModal, setShowQRModal] = useState(false);
     const [roomQR, setRoomQR] = useState<GuruRoomQR | null>(null);
@@ -182,6 +190,19 @@ const Settings: React.FC = () => {
     const updateToleranceMutation = useMutation({
         mutationFn: async (data: { id: number; toleranceBeforeMin?: number; lateAfterMin?: number; startTime: string; endTime: string }) => {
             const res = await fetch(`${API}/working-hours/${data.id}`, {
+                method: 'PUT', headers: getHeaders(),
+                body: JSON.stringify(data),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+        },
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workingHours'] }),
+    });
+
+    // ── Bulk update mutation ──
+    const bulkUpdateMutation = useMutation({
+        mutationFn: async (data: { days?: number[]; startTime?: string; endTime?: string; toleranceBeforeMin?: number; lateAfterMin?: number }) => {
+            const res = await fetch(`${API}/working-hours/bulk-update`, {
                 method: 'PUT', headers: getHeaders(),
                 body: JSON.stringify(data),
             });
@@ -405,10 +426,32 @@ const Settings: React.FC = () => {
         }
     }, [slotForm, editingSlot, validateSlotForm, createSlotMutation, updateSlotMutation]);
 
+    const [confirmState, setConfirmState] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        confirmLabel: string;
+        variant: 'danger' | 'warning' | 'info';
+        onConfirm: () => void;
+    }>({ open: false, title: '', message: '', confirmLabel: '', variant: 'danger', onConfirm: () => { } });
+
+    const showConfirm = useCallback((opts: Omit<typeof confirmState, 'open'>) => {
+        setConfirmState({ ...opts, open: true });
+    }, []);
+
+    const closeConfirm = useCallback(() => {
+        setConfirmState(prev => ({ ...prev, open: false }));
+    }, []);
+
     const handleDeleteSlot = useCallback((slot: TimeSlot) => {
-        if (!confirm(`Hapus Jam ke-${slot.slotNumber} (${slot.startTime}-${slot.endTime})?`)) return;
-        deleteSlotMutation.mutate(slot.id);
-    }, [deleteSlotMutation]);
+        showConfirm({
+            title: 'Hapus Jam Pelajaran?',
+            message: `Jam ke-${slot.slotNumber} (${slot.startTime} - ${slot.endTime}) akan dihapus permanen.`,
+            confirmLabel: 'Hapus',
+            variant: 'danger',
+            onConfirm: () => { deleteSlotMutation.mutate(slot.id); closeConfirm(); },
+        });
+    }, [deleteSlotMutation, showConfirm, closeConfirm]);
 
     const handleRefreshGrids = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['timeSlots'] });
@@ -464,9 +507,14 @@ const Settings: React.FC = () => {
     }, [holidayForm, editingHoliday, createHolidayMutation, updateHolidayMutation]);
 
     const handleDeleteHoliday = useCallback((h: HolidayEvent) => {
-        if (!confirm(`Hapus libur "${h.reason}" pada ${h.date}?`)) return;
-        deleteHolidayMutation.mutate(h.id);
-    }, [deleteHolidayMutation]);
+        showConfirm({
+            title: 'Hapus Hari Libur?',
+            message: `Libur "${h.reason}" pada ${h.date} akan dihapus permanen.`,
+            confirmLabel: 'Hapus',
+            variant: 'danger',
+            onConfirm: () => { deleteHolidayMutation.mutate(h.id); closeConfirm(); },
+        });
+    }, [deleteHolidayMutation, showConfirm, closeConfirm]);
 
     const handleDownloadTemplate = useCallback(() => {
         const wb = XLSX.utils.book_new();
@@ -503,9 +551,13 @@ const Settings: React.FC = () => {
                 return;
             }
 
-            if (confirm(`Import ${holidays.length} libur dari Excel?`)) {
-                importHolidaysMutation.mutate(holidays);
-            }
+            showConfirm({
+                title: 'Import Hari Libur?',
+                message: `${holidays.length} data libur dari Excel akan diimport ke sistem.`,
+                confirmLabel: 'Import',
+                variant: 'info',
+                onConfirm: () => { importHolidaysMutation.mutate(holidays); closeConfirm(); },
+            });
         };
         reader.readAsArrayBuffer(file);
         // Reset input
@@ -598,7 +650,7 @@ const Settings: React.FC = () => {
                 </header>
 
                 <Tabs defaultValue="attendance" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5 mb-8">
+                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 mb-8">
                         <TabsTrigger value="attendance" className="flex items-center gap-2">
                             <Clock className="h-4 w-4" /> Working Hours
                         </TabsTrigger>
@@ -611,8 +663,11 @@ const Settings: React.FC = () => {
                         <TabsTrigger value="geofence" className="flex items-center gap-2">
                             <MapPin className="h-4 w-4" /> Geofence
                         </TabsTrigger>
+                        <TabsTrigger value="backup" className="flex items-center gap-2 text-emerald-600">
+                            <HardDrive className="h-4 w-4" /> Backup
+                        </TabsTrigger>
                         <TabsTrigger value="cleanup" className="flex items-center gap-2 text-red-600">
-                            <Database className="h-4 w-4" /> Data Cleanup
+                            <ShieldAlert className="h-4 w-4" /> Cleanup
                         </TabsTrigger>
                     </TabsList>
 
@@ -653,6 +708,75 @@ const Settings: React.FC = () => {
                                 </div>
                             ) : (
                                 <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                                    {/* ── Mass Setup Toolbar ── */}
+                                    <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-gray-200 px-4 py-3">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wider whitespace-nowrap">Mass Setup:</span>
+                                            <div className="flex items-center gap-1.5">
+                                                {[1, 2, 3, 4, 5, 6, 7].map(d => {
+                                                    // Check if ALL teachers have this day active
+                                                    const allHaveDay = workingHoursTeachers.length > 0 && workingHoursTeachers.every(t => t.days.some(dd => dd.dayOfWeek === d));
+                                                    return (
+                                                        <button
+                                                            key={d}
+                                                            onClick={() => {
+                                                                // Compute new days array: toggle this day for all
+                                                                const currentDays = new Set<number>();
+                                                                // Build union of all active days from all teachers
+                                                                for (const t of workingHoursTeachers) {
+                                                                    for (const dd of t.days) currentDays.add(dd.dayOfWeek);
+                                                                }
+                                                                if (allHaveDay) {
+                                                                    currentDays.delete(d);
+                                                                } else {
+                                                                    currentDays.add(d);
+                                                                }
+                                                                bulkUpdateMutation.mutate({ days: Array.from(currentDays) });
+                                                            }}
+                                                            disabled={bulkUpdateMutation.isPending}
+                                                            className={`w-7 h-7 rounded-md border-2 flex items-center justify-center text-[10px] font-bold transition-all ${allHaveDay
+                                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                                                                : 'bg-white border-gray-300 text-gray-400 hover:border-indigo-400'
+                                                                }`}
+                                                            title={`${allHaveDay ? 'Hapus' : 'Centang'} ${DAY_FULL[d]} untuk semua guru`}
+                                                        >
+                                                            {DAY_LABELS[d]}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className="h-5 w-px bg-gray-300 hidden sm:block" />
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <input type="time" value={massStartTime} onChange={e => setMassStartTime(e.target.value)}
+                                                    className="px-2 py-1 border border-gray-300 rounded-md text-xs w-[90px] focus:ring-2 focus:ring-indigo-500 outline-none" title="Jam Mulai" />
+                                                <input type="time" value={massEndTime} onChange={e => setMassEndTime(e.target.value)}
+                                                    className="px-2 py-1 border border-gray-300 rounded-md text-xs w-[90px] focus:ring-2 focus:ring-indigo-500 outline-none" title="Jam Selesai" />
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px] text-gray-500">Tol</span>
+                                                    <input type="number" min={0} max={120} value={massTolerance} onChange={e => setMassTolerance(Number(e.target.value))}
+                                                        className="w-12 px-1 py-1 border border-gray-300 rounded-md text-xs text-center focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px] text-gray-500">Telat</span>
+                                                    <input type="number" min={0} max={120} value={massLate} onChange={e => setMassLate(Number(e.target.value))}
+                                                        className="w-12 px-1 py-1 border border-gray-300 rounded-md text-xs text-center focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                                </div>
+                                                <button
+                                                    onClick={() => bulkUpdateMutation.mutate({
+                                                        startTime: massStartTime,
+                                                        endTime: massEndTime,
+                                                        toleranceBeforeMin: massTolerance,
+                                                        lateAfterMin: massLate,
+                                                    })}
+                                                    disabled={bulkUpdateMutation.isPending}
+                                                    className="px-3 py-1 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700 transition disabled:opacity-50 whitespace-nowrap"
+                                                >
+                                                    {bulkUpdateMutation.isPending ? 'Menerapkan...' : 'Terapkan Semua'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <table className="w-full">
                                         <thead>
                                             <tr className="bg-gray-50 border-b border-gray-200">
@@ -755,7 +879,7 @@ const Settings: React.FC = () => {
                                                             <input
                                                                 type="number"
                                                                 min={0}
-                                                                max={60}
+                                                                max={120}
                                                                 value={lateAfter}
                                                                 onChange={(e) => {
                                                                     const val = Number(e.target.value);
@@ -1110,7 +1234,12 @@ const Settings: React.FC = () => {
                         <GeofenceTab />
                     </TabsContent>
 
-                    {/* ─── Tab 5: Data Cleanup ─── */}
+                    {/* ─── Tab 6: Backup Data ─── */}
+                    <TabsContent value="backup" className="bg-white p-6 rounded-xl shadow-sm">
+                        <BackupTab />
+                    </TabsContent>
+
+                    {/* ─── Tab 7: Data Cleanup ─── */}
                     <TabsContent value="cleanup" className="bg-white p-6 rounded-xl shadow-sm">
                         <div className="space-y-6">
                             {/* Header */}
@@ -1487,6 +1616,16 @@ const Settings: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                open={confirmState.open}
+                title={confirmState.title}
+                message={confirmState.message}
+                confirmLabel={confirmState.confirmLabel}
+                variant={confirmState.variant}
+                onConfirm={confirmState.onConfirm}
+                onCancel={closeConfirm}
+            />
         </div>
     );
 };

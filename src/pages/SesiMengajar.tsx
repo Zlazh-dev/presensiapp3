@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../lib/api';
 import Scanner from '../components/Scanner';
 import { useSocket } from '../context/SocketContext';
+import ConfirmModal from '../components/ConfirmModal';
 import {
     Loader2, CheckCircle, Users, Clock,
     LogOut as LogOutIcon,
@@ -294,6 +295,7 @@ const SesiMengajar: React.FC = () => {
     // State for early checkout modal
     const [showEarlyCheckoutModal, setShowEarlyCheckoutModal] = useState(false);
     const [earlyCheckoutReason, setEarlyCheckoutReason] = useState('');
+    const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
     const [earlyCheckoutInfo, setEarlyCheckoutInfo] = useState<{
         elapsedPercent: number;
         elapsedMinutes: number;
@@ -305,8 +307,11 @@ const SesiMengajar: React.FC = () => {
     const handleCheckout = async (reason?: string) => {
         if (!currentSession) return;
 
-        // If not confirming with reason, ask for confirmation
-        if (!reason && !confirm('Apakah Anda yakin ingin mengakhiri sesi ini?')) return;
+        // If not confirming with reason, show custom modal
+        if (!reason) {
+            setShowCheckoutConfirm(true);
+            return;
+        }
 
         setIsSubmitting(true);
         try {
@@ -889,6 +894,18 @@ const SesiMengajar: React.FC = () => {
                     )}
                 </>
             )}
+
+            {/* Checkout Confirmation Modal */}
+            <ConfirmModal
+                open={showCheckoutConfirm}
+                title="Akhiri Sesi?"
+                message="Apakah Anda yakin ingin mengakhiri sesi mengajar ini?"
+                confirmLabel="Ya, Akhiri"
+                variant="warning"
+                loading={isSubmitting}
+                onConfirm={() => { setShowCheckoutConfirm(false); handleCheckout('normal'); }}
+                onCancel={() => setShowCheckoutConfirm(false)}
+            />
 
             {/* Early Checkout Confirmation Modal */}
             <EarlyCheckoutModal />

@@ -7,6 +7,7 @@ import {
     updateWorkingHours,
     deleteWorkingHours,
     toggleDay,
+    bulkUpdate,
 } from '../controllers/workingHoursController';
 
 const router = Router();
@@ -18,6 +19,7 @@ router.get('/', getAllWorkingHours);
 router.get('/:teacherId', getTeacherWorkingHours);
 router.post('/', createWorkingHours);
 router.put('/toggle', toggleDay);
+router.put('/bulk-update', bulkUpdate);
 router.put('/:id', updateWorkingHours);
 router.delete('/:id', deleteWorkingHours);
 

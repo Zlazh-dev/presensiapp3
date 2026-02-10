@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { Loader2, Camera, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface ScannerProps {
@@ -77,7 +77,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanSuccess, onScanFailure }) => {
                 (decodedText) => {
                     handleSuccess(decodedText);
                 },
-                (errorMessage) => {
+                (_errorMessage) => {
                     // Ignore transient errors
                 }
             );

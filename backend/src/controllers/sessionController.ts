@@ -418,7 +418,6 @@ export const checkOutSession = async (req: AuthRequest, res: Response): Promise<
         }
 
         const now = getJakartaNow();
-        const dateStr = now.toISOString().split('T')[0];
         const nowTime = now.toTimeString().split(' ')[0];
 
         // Get schedule info
@@ -430,12 +429,18 @@ export const checkOutSession = async (req: AuthRequest, res: Response): Promise<
             return;
         }
 
+        // Use session's actual date for calculations, not today
+        const sessionDate = new Date(session.date);
+        const sessionDateStr = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}-${String(sessionDate.getDate()).padStart(2, '0')}`;
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const isStaleSession = sessionDateStr !== todayStr;
+
         // Calculate session times
         const plannedStart = session.startTime || schedule.startTime;
         const plannedEnd = session.endTime || schedule.endTime;
 
-        const startOb = new Date(`${dateStr}T${plannedStart}`);
-        const endOb = new Date(`${dateStr}T${plannedEnd}`);
+        const startOb = new Date(`${sessionDateStr}T${plannedStart}`);
+        const endOb = new Date(`${sessionDateStr}T${plannedEnd}`);
         const tenMinBeforeEnd = new Date(endOb.getTime() - 10 * 60000);
 
         // Calculate elapsed and total duration
@@ -448,52 +453,58 @@ export const checkOutSession = async (req: AuthRequest, res: Response): Promise<
         // Determine if this is an early checkout (before 10 min of end time)
         const isEarlyCheckout = now < tenMinBeforeEnd;
 
-        // STRICT RULE: Minimum 80% of session duration must pass before ANY checkout
-        const MIN_CHECKOUT_PERCENT = 80;
+        // If session is from a PREVIOUS day, allow immediate checkout (it's overdue)
+        if (isStaleSession) {
+            console.log(`[AUTO-CLOSE] Stale session ${session.id} from ${sessionDateStr} being closed on ${todayStr}`);
+            // Skip all early checkout checks — just close it
+        } else {
+            // STRICT RULE: Minimum 80% of session duration must pass before ANY checkout
+            const MIN_CHECKOUT_PERCENT = 80;
 
-        if (elapsedPercent < MIN_CHECKOUT_PERCENT) {
-            const remainingForMinimum = Math.ceil((totalDurationMs * (MIN_CHECKOUT_PERCENT / 100) - elapsedMs) / 60000);
-            const minMinutesRequired = Math.ceil(totalMinutes * MIN_CHECKOUT_PERCENT / 100);
+            if (elapsedPercent < MIN_CHECKOUT_PERCENT) {
+                const remainingForMinimum = Math.ceil((totalDurationMs * (MIN_CHECKOUT_PERCENT / 100) - elapsedMs) / 60000);
+                const minMinutesRequired = Math.ceil(totalMinutes * MIN_CHECKOUT_PERCENT / 100);
 
-            // If very early (< 50%), reject completely
-            if (elapsedPercent < 50) {
-                res.status(400).json({
-                    error: `Checkout belum diizinkan. Sesi baru berjalan ${elapsedPercent}% (${elapsedMinutes}/${totalMinutes} menit). Minimal ${MIN_CHECKOUT_PERCENT}% durasi sesi harus terlewati.`,
-                    earlyCheckout: true,
-                    requiresReason: false,
-                    canCheckout: false,
-                    elapsedPercent,
-                    elapsedMinutes,
-                    totalMinutes,
-                    minPercent: MIN_CHECKOUT_PERCENT,
-                    minutesRemaining: remainingForMinimum,
-                    minMinutesRequired
-                });
-                return;
-            }
+                // If very early (< 50%), reject completely
+                if (elapsedPercent < 50) {
+                    res.status(400).json({
+                        error: `Checkout belum diizinkan. Sesi baru berjalan ${elapsedPercent}% (${elapsedMinutes}/${totalMinutes} menit). Minimal ${MIN_CHECKOUT_PERCENT}% durasi sesi harus terlewati.`,
+                        earlyCheckout: true,
+                        requiresReason: false,
+                        canCheckout: false,
+                        elapsedPercent,
+                        elapsedMinutes,
+                        totalMinutes,
+                        minPercent: MIN_CHECKOUT_PERCENT,
+                        minutesRemaining: remainingForMinimum,
+                        minMinutesRequired
+                    });
+                    return;
+                }
 
-            // Between 50-80%: Allow with mandatory reason
-            if (!earlyCheckoutReason || earlyCheckoutReason.trim() === '') {
-                res.status(400).json({
-                    error: `Check-out awal memerlukan alasan. Sesi baru berjalan ${elapsedPercent}% (${elapsedMinutes}/${totalMinutes} menit). Checkout normal tersedia setelah ${MIN_CHECKOUT_PERCENT}% durasi.`,
-                    earlyCheckout: true,
-                    requiresReason: true,
-                    canCheckout: true,
-                    elapsedPercent,
-                    elapsedMinutes,
-                    totalMinutes,
-                    minPercent: MIN_CHECKOUT_PERCENT,
-                    minutesUntilNormalCheckout: remainingForMinimum,
-                    availableReasons: [
-                        { value: 'class_cancelled', label: 'Kelas dibatalkan' },
-                        { value: 'students_absent', label: 'Siswa tidak hadir' },
-                        { value: 'emergency', label: 'Kondisi darurat' },
-                        { value: 'schedule_conflict', label: 'Konflik jadwal' },
-                        { value: 'material_completed', label: 'Materi selesai lebih awal' },
-                        { value: 'other', label: 'Lainnya' }
-                    ]
-                });
-                return;
+                // Between 50-80%: Allow with mandatory reason
+                if (!earlyCheckoutReason || earlyCheckoutReason.trim() === '') {
+                    res.status(400).json({
+                        error: `Check-out awal memerlukan alasan. Sesi baru berjalan ${elapsedPercent}% (${elapsedMinutes}/${totalMinutes} menit). Checkout normal tersedia setelah ${MIN_CHECKOUT_PERCENT}% durasi.`,
+                        earlyCheckout: true,
+                        requiresReason: true,
+                        canCheckout: true,
+                        elapsedPercent,
+                        elapsedMinutes,
+                        totalMinutes,
+                        minPercent: MIN_CHECKOUT_PERCENT,
+                        minutesUntilNormalCheckout: remainingForMinimum,
+                        availableReasons: [
+                            { value: 'class_cancelled', label: 'Kelas dibatalkan' },
+                            { value: 'students_absent', label: 'Siswa tidak hadir' },
+                            { value: 'emergency', label: 'Kondisi darurat' },
+                            { value: 'schedule_conflict', label: 'Konflik jadwal' },
+                            { value: 'material_completed', label: 'Materi selesai lebih awal' },
+                            { value: 'other', label: 'Lainnya' }
+                        ]
+                    });
+                    return;
+                }
             }
         }
 
@@ -510,8 +521,10 @@ export const checkOutSession = async (req: AuthRequest, res: Response): Promise<
             checkOutTime: endTime,
         };
 
-        // If early checkout, record the reason and duration info
-        if (isEarlyCheckout) {
+        // Record reason/notes for audit
+        if (isStaleSession) {
+            updateData.notes = `[AUTO-CLOSE] Stale session from ${sessionDateStr}, closed on ${todayStr}`;
+        } else if (isEarlyCheckout) {
             updateData.notes = `[EARLY CHECKOUT] Reason: ${earlyCheckoutReason} | Elapsed: ${elapsedMinutes}/${totalMinutes} min (${elapsedPercent}%)`;
         }
 
@@ -578,15 +591,11 @@ export const getMyActiveSession = async (req: AuthRequest, res: Response): Promi
             return;
         }
 
-        const now = getJakartaNow();
-        const dateStr = now.toISOString().split('T')[0];
-
         // Find session where teacher is participant (attendance) AND session is ongoing
-        // JOIN teacher_attendance -> session
+        // NOTE: Do NOT filter by date — stale sessions from previous days must also be found
         const activeAtt = await TeacherAttendance.findOne({
             where: {
                 teacherId: teacher.id,
-                date: dateStr,
                 checkOutTime: null as any, // Not checked out
                 sessionId: { [Op.ne]: null as any } // Is a session
             },
@@ -717,14 +726,14 @@ export const getMyCurrentSession = async (req: AuthRequest, res: Response): Prom
         }
 
         const now = getJakartaNow();
-        const todayStr = now.toISOString().split('T')[0];
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         // A. Check for ACTIVE session (Checked In but NOT Checked Out)
         // This takes precedence over everything.
+        // NOTE: Do NOT filter by date — stale sessions from previous days must also be detected
         const activeAtt = await TeacherAttendance.findOne({
             where: {
                 teacherId: teacher.id,
-                date: todayStr,
                 checkOutTime: null as any,
                 sessionId: { [Op.ne]: null as any }
             },
@@ -751,13 +760,18 @@ export const getMyCurrentSession = async (req: AuthRequest, res: Response): Prom
             const sched = sess.schedule;
 
             // Calculate check-out window
-            // Use session endTime or schedule endTime
+            // Use session's actual date for time calculations
+            const sessDate = new Date(sess.date);
+            const sessDateStr = `${sessDate.getFullYear()}-${String(sessDate.getMonth() + 1).padStart(2, '0')}-${String(sessDate.getDate()).padStart(2, '0')}`;
+            const isStale = sessDateStr !== todayStr;
+
             const plannedEnd = sess.endTime || sched?.endTime || '23:59:59';
-            const endT = new Date(`${todayStr}T${plannedEnd}`);
+            const endT = new Date(`${sessDateStr}T${plannedEnd}`);
             const tenMinMs = 10 * 60 * 1000;
             const nowTime = now.getTime();
 
-            const minutesUntilCheckOut = Math.ceil((endT.getTime() - tenMinMs - nowTime) / 60000);
+            // If session is from a previous day, always allow checkout
+            const minutesUntilCheckOut = isStale ? -1 : Math.ceil((endT.getTime() - tenMinMs - nowTime) / 60000);
             const canCheckOut = minutesUntilCheckOut <= 0;
 
             // Calculate schedule times for frontend timer

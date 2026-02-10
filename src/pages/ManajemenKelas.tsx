@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Search, X, GraduationCap, QrCode, Download, Printer, Users } from 'lucide-react';
 import api from '../lib/api';
+import ConfirmModal from '../components/ConfirmModal';
 
 interface ClassItem {
     id: number;
@@ -25,6 +26,7 @@ const ManajemenKelas: React.FC = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [formData, setFormData] = useState({ name: '', level: 7 });
     const [loading, setLoading] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null; name: string }>({ open: false, id: null, name: '' });
 
     // QR Modal State
     const [qrModal, setQrModal] = useState<{ open: boolean; cls: ClassItem | null; qrPng: string; qrSvg: string }>({
@@ -58,13 +60,19 @@ const ManajemenKelas: React.FC = () => {
         (c) => c.name.toLowerCase().includes(search.toLowerCase())
     );
 
-    const handleDelete = async (id: number) => {
-        if (!confirm('Hapus kelas ini?')) return;
+    const handleDeleteClick = (cls: ClassItem) => {
+        setDeleteConfirm({ open: true, id: cls.id, name: cls.name });
+    };
+
+    const handleDeleteConfirm = async () => {
+        if (!deleteConfirm.id) return;
         try {
-            await api.delete(`/classes/${id}`);
-            setClasses(classes.filter((c) => c.id !== id));
+            await api.delete(`/classes/${deleteConfirm.id}`);
+            setClasses(classes.filter((c) => c.id !== deleteConfirm.id));
         } catch (err) {
             alert('Gagal menghapus kelas');
+        } finally {
+            setDeleteConfirm({ open: false, id: null, name: '' });
         }
     };
 
@@ -235,7 +243,7 @@ const ManajemenKelas: React.FC = () => {
                                         <Edit2 className="w-4 h-4" />
                                     </button>
                                     <button
-                                        onClick={() => handleDelete(cls.id)}
+                                        onClick={() => handleDeleteClick(cls)}
                                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                         title="Hapus"
                                     >
@@ -361,6 +369,16 @@ const ManajemenKelas: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                open={deleteConfirm.open}
+                title="Hapus Kelas?"
+                message={`Kelas "${deleteConfirm.name}" akan dihapus permanen beserta data siswa di dalamnya.`}
+                confirmLabel="Hapus"
+                variant="danger"
+                onConfirm={handleDeleteConfirm}
+                onCancel={() => setDeleteConfirm({ open: false, id: null, name: '' })}
+            />
         </div>
     );
 };

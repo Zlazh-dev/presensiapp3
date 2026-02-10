@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ConfirmModal from './ConfirmModal';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/Card';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
@@ -57,6 +58,7 @@ const ScheduleManagement = () => {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('1'); // Default to Monday
+    const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
 
     const [formData, setFormData] = useState({
         classId: '',
@@ -191,12 +193,15 @@ const ScheduleManagement = () => {
         }
     };
 
-    const handleDelete = async (id: number) => {
-        if (!confirm('Apakah Anda yakin ingin menghapus jadwal ini?')) return;
+    const handleDeleteClick = (id: number) => {
+        setDeleteConfirm({ open: true, id });
+    };
 
+    const handleDeleteConfirm = async () => {
+        if (!deleteConfirm.id) return;
         try {
             const headers = getAuthHeader();
-            const response = await fetch(`/api/schedules/${id}`, {
+            const response = await fetch(`/api/schedules/${deleteConfirm.id}`, {
                 method: 'DELETE',
                 headers
             });
@@ -205,9 +210,11 @@ const ScheduleManagement = () => {
                 throw new Error('Gagal menghapus jadwal');
             }
 
-            setSchedules(schedules.filter(s => s.id !== id));
+            setSchedules(schedules.filter(s => s.id !== deleteConfirm.id));
         } catch (err: any) {
             alert(err.message);
+        } finally {
+            setDeleteConfirm({ open: false, id: null });
         }
     };
 
@@ -256,7 +263,7 @@ const ScheduleManagement = () => {
                                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenModal(schedule)}>
                                                 <Edit className="w-4 h-4" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(schedule.id)}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(schedule.id)}>
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
                                         </div>
@@ -425,6 +432,16 @@ const ScheduleManagement = () => {
                     </div>
                 </form>
             </Modal>
+
+            <ConfirmModal
+                open={deleteConfirm.open}
+                title="Hapus Jadwal?"
+                message="Jadwal pelajaran ini akan dihapus permanen. Tindakan ini tidak dapat dibatalkan."
+                confirmLabel="Hapus"
+                variant="danger"
+                onConfirm={handleDeleteConfirm}
+                onCancel={() => setDeleteConfirm({ open: false, id: null })}
+            />
         </Card>
     );
 };

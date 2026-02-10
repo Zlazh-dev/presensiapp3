@@ -335,7 +335,8 @@ export const getActiveSession = async (req: Request, res: Response): Promise<voi
         }
 
         const { Session, Schedule, Subject, Teacher, User } = require('../models');
-        const today = new Date().toISOString().split('T')[0];
+        const { getJakartaToday } = require('../utils/date');
+        const today = getJakartaToday();
 
         const activeSession = await Session.findOne({
             where: { date: today, status: 'ongoing' },
