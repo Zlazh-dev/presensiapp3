@@ -5,7 +5,7 @@ interface StudentAttendanceAttributes {
     id: number;
     studentId: number;
     sessionId: number;
-    status: 'present' | 'absent' | 'sick' | 'permission' | 'late';
+    status: 'present' | 'absent' | 'sick' | 'permission' | 'late' | 'alpha';
     markedAt?: Date;
     markedBy?: number;
     notes?: string;
@@ -20,7 +20,7 @@ class StudentAttendance extends Model<StudentAttendanceAttributes, StudentAttend
     public id!: number;
     public studentId!: number;
     public sessionId!: number;
-    public status!: 'present' | 'absent' | 'sick' | 'permission' | 'late';
+    public status!: 'present' | 'absent' | 'sick' | 'permission' | 'late' | 'alpha';
     public markedAt?: Date;
     public markedBy?: number;
     public notes?: string;
@@ -54,7 +54,7 @@ StudentAttendance.init(
             onDelete: 'CASCADE',
         },
         status: {
-            type: DataTypes.ENUM('present', 'absent', 'sick', 'permission', 'late'),
+            type: DataTypes.ENUM('present', 'absent', 'sick', 'permission', 'late', 'alpha'),
             allowNull: false,
         },
         markedAt: {

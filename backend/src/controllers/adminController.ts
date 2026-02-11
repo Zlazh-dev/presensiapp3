@@ -1011,3 +1011,201 @@ export const cleanupAttendance = async (req: Request, res: Response): Promise<vo
         res.status(500).json({ error: 'Gagal menghapus data', details: error.message });
     }
 };
+
+// ========== ANALYTICS ==========
+
+import sequelize from '../config/database';
+import { fn, col, literal } from 'sequelize';
+
+/**
+ * Get analytics data for admin dashboard
+ * GET /api/admin/analytics?start=YYYY-MM-DD&end=YYYY-MM-DD
+ */
+export const getAnalytics = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { start, end } = req.query;
+        if (!start || !end) {
+            res.status(400).json({ error: 'start and end query params required' });
+            return;
+        }
+
+        const startDate = start as string;
+        const endDate = end as string;
+        const dateWhere = { date: { [Op.between]: [startDate, endDate] } };
+
+        // Get all teachers for reference
+        const allTeachers = await Teacher.findAll({
+            include: [{ model: User, as: 'user', attributes: ['name'] }],
+            attributes: ['id'],
+        });
+        const teacherMap = new Map<number, string>();
+        allTeachers.forEach((t: any) => teacherMap.set(t.id, t.user?.name || 'Unknown'));
+
+        // Fetch all attendance in range
+        const attendances = await TeacherAttendance.findAll({
+            where: dateWhere,
+            attributes: ['id', 'teacherId', 'date', 'status', 'checkInTime', 'lateMinutes'],
+            order: [['date', 'ASC']],
+        });
+
+        // ─── 1. TREND: daily attendance % ───
+        const dateMap = new Map<string, { hadir: number; total: number }>();
+        attendances.forEach((a: any) => {
+            const d = a.date;
+            if (!dateMap.has(d)) dateMap.set(d, { hadir: 0, total: 0 });
+            const entry = dateMap.get(d)!;
+            entry.total++;
+            if (['present', 'late'].includes(a.status)) entry.hadir++;
+        });
+        const trend = Array.from(dateMap.entries()).map(([date, v]) => ({
+            date,
+            hadir: v.hadir,
+            total: v.total,
+            pct: v.total > 0 ? Math.round((v.hadir / v.total) * 100) : 0,
+        }));
+
+        // ─── 2. RANKING: per teacher ───
+        const teacherStats = new Map<number, { hadir: number; total: number; late: number }>();
+        attendances.forEach((a: any) => {
+            if (!teacherStats.has(a.teacherId)) teacherStats.set(a.teacherId, { hadir: 0, total: 0, late: 0 });
+            const s = teacherStats.get(a.teacherId)!;
+            s.total++;
+            if (['present', 'late'].includes(a.status)) s.hadir++;
+            if (a.status === 'late') s.late++;
+        });
+        const ranking = Array.from(teacherStats.entries())
+            .map(([teacherId, s]) => ({
+                teacherId,
+                name: teacherMap.get(teacherId) || 'Unknown',
+                hadir: s.hadir,
+                total: s.total,
+                pct: s.total > 0 ? Math.round((s.hadir / s.total) * 100) : 0,
+                late: s.late,
+            }))
+            .sort((a, b) => b.pct - a.pct || a.late - b.late);
+
+        // ─── 3. HEATMAP: lateness by day × hour ───
+        const heatmap: Array<{ day: number; hour: number; lateCount: number }> = [];
+        const heatGrid = new Map<string, number>();
+        attendances.forEach((a: any) => {
+            if (a.status === 'late' && a.checkInTime) {
+                const dateObj = new Date(a.date + 'T00:00:00');
+                const day = dateObj.getDay(); // 0=Sun..6=Sat
+                const hour = parseInt(a.checkInTime.split(':')[0], 10);
+                const key = `${day}-${hour}`;
+                heatGrid.set(key, (heatGrid.get(key) || 0) + 1);
+            }
+        });
+        // Fill grid: Mon(1)→Sat(6), hours 6→17
+        for (let day = 1; day <= 6; day++) {
+            for (let hour = 6; hour <= 17; hour++) {
+                const key = `${day}-${hour}`;
+                heatmap.push({ day, hour, lateCount: heatGrid.get(key) || 0 });
+            }
+        }
+
+        // ─── 4. REPORT CARD: per teacher status breakdown ───
+        const reportMap = new Map<number, { hadir: number; telat: number; izin: number; sakit: number; alpha: number; total: number }>();
+        attendances.forEach((a: any) => {
+            if (!reportMap.has(a.teacherId)) reportMap.set(a.teacherId, { hadir: 0, telat: 0, izin: 0, sakit: 0, alpha: 0, total: 0 });
+            const r = reportMap.get(a.teacherId)!;
+            r.total++;
+            if (a.status === 'present') r.hadir++;
+            else if (a.status === 'late') r.telat++;
+            else if (a.status === 'permission') r.izin++;
+            else if (a.status === 'sick') r.sakit++;
+            else if (['alpha', 'absent'].includes(a.status)) r.alpha++;
+        });
+        const reportCard = Array.from(reportMap.entries())
+            .map(([teacherId, r]) => ({
+                teacherId,
+                name: teacherMap.get(teacherId) || 'Unknown',
+                ...r,
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        res.json({ trend, ranking, heatmap, reportCard });
+    } catch (error: any) {
+        console.error('Get analytics error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// ========== TEACHER LEAVES ==========
+
+/**
+ * Get all teacher leave/sick records for admin view
+ * GET /api/admin/teacher-leaves?start=YYYY-MM-DD&end=YYYY-MM-DD&status=sick|permission&search=name
+ */
+export const getTeacherLeaves = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { start, end, status, search } = req.query;
+
+        const where: any = {
+            status: { [Op.in]: ['sick', 'permission'] },
+        };
+
+        if (start && end) {
+            where.date = { [Op.between]: [start, end] };
+        } else if (start) {
+            where.date = { [Op.gte]: start };
+        } else if (end) {
+            where.date = { [Op.lte]: end };
+        }
+
+        if (status && ['sick', 'permission'].includes(status as string)) {
+            where.status = status;
+        }
+
+        const records = await TeacherAttendance.findAll({
+            where,
+            include: [{
+                model: Teacher,
+                as: 'teacher',
+                attributes: ['id', 'fullName', 'employeeId', 'phone'],
+                include: [{
+                    model: User,
+                    as: 'user',
+                    attributes: ['name'],
+                }],
+            }],
+            order: [['date', 'DESC'], ['createdAt', 'DESC']],
+        });
+
+        let rows = records.map((r: any) => ({
+            id: r.id,
+            date: r.date,
+            teacherId: r.teacherId,
+            teacherName: r.teacher?.user?.name || r.teacher?.fullName || 'Unknown',
+            employeeId: r.teacher?.employeeId || '-',
+            phone: r.teacher?.phone || '-',
+            status: r.status,
+            statusLabel: r.status === 'sick' ? 'Sakit' : 'Izin',
+            notes: r.notes || null,
+            attachmentUrl: r.attachmentUrl || null,
+            createdAt: r.createdAt,
+        }));
+
+        // Filter by search term if provided
+        if (search) {
+            const searchLower = (search as string).toLowerCase();
+            rows = rows.filter(r => r.teacherName.toLowerCase().includes(searchLower));
+        }
+
+        // Summary stats
+        const totalSick = rows.filter(r => r.status === 'sick').length;
+        const totalPermission = rows.filter(r => r.status === 'permission').length;
+
+        res.json({
+            rows,
+            summary: {
+                total: rows.length,
+                sick: totalSick,
+                permission: totalPermission,
+            },
+        });
+    } catch (error: any) {
+        console.error('Get teacher leaves error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};

@@ -245,6 +245,70 @@ export const bulkDeleteSchedules = async (req: Request, res: Response): Promise<
     }
 };
 
+// ========== TEACHER: My Schedule ==========
+
+/**
+ * GET /api/schedules/my-schedule
+ * Returns the logged-in teacher's schedule as a day×slot grid
+ */
+export const getMySchedule = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+
+        // Find teacher record for this user
+        const teacher = await Teacher.findOne({ where: { userId } });
+        if (!teacher) {
+            res.status(404).json({ error: 'Data guru tidak ditemukan' });
+            return;
+        }
+
+        // Get all time slots
+        const timeSlots = await TimeSlot.findAll({ order: [['slotNumber', 'ASC']] });
+
+        // Get all schedules for this teacher
+        const schedules = await Schedule.findAll({
+            where: { teacherId: teacher.id },
+            include: [
+                { model: Class, as: 'class', attributes: ['id', 'name', 'level'] },
+                { model: Subject, as: 'subject', attributes: ['id', 'name', 'code'] },
+            ],
+            order: [['dayOfWeek', 'ASC'], ['startTime', 'ASC']],
+        });
+
+        // Build grid: for each day, for each time slot, find matching schedule
+        const grid = DAYS.map((day, index) => {
+            const dayNumber = index + 1;
+            const daySchedules = schedules.filter((s: any) => s.dayOfWeek === dayNumber);
+
+            const slots = timeSlots.map((ts: any) => {
+                const match = daySchedules.find((s: any) => {
+                    const schedStart = s.startTime.substring(0, 5);
+                    return schedStart === ts.startTime;
+                });
+
+                if (match) {
+                    const m = match as any;
+                    return {
+                        scheduleId: m.id,
+                        className: m.class?.name || '',
+                        classId: m.class?.id,
+                        subject: m.subject?.name || '',
+                        subjectCode: m.subject?.code || '',
+                    };
+                }
+                return null;
+            });
+
+            return { day, dayNumber, slots };
+        });
+
+        res.json({ grid, timeSlots, teacherName: (await User.findByPk(userId))?.name || '' });
+    } catch (error) {
+        console.error('Get my schedule error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 // ========== NEW: Grid / Bulk / Export / Import ==========
 
 /**
@@ -662,12 +726,42 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
             teacherCheckInTimes[r.teacherId] = r.checkInTime;
         });
 
-        // 3. Find/create sessions only for schedules where the teacher is ABSENT today
-        // If the teacher checked in (daily attendance), they're at school and can teach → no substitute needed
+        // 3. Get existing sessions for today to check which ones are actually started
+        const existingSessions = await Session.findAll({
+            where: { date: today },
+            attributes: ['id', 'scheduleId', 'status', 'substituteTeacherId'],
+        });
+        const sessionByScheduleId: Record<number, any> = {};
+        for (const s of existingSessions as any[]) {
+            sessionByScheduleId[s.scheduleId] = s;
+        }
+
+        // 4. Build results — show sessions that need a substitute:
+        //    (a) Teacher is absent (not checked in) — always needs substitute
+        //    (b) Teacher is present but class time has started and session NOT started (no QR scan)
         const result: any[] = [];
         for (const sched of todaySchedules as any[]) {
-            // Skip sessions where the original teacher is present (checked in for the day)
-            if (checkedInTeacherIds.has(sched.teacherId)) continue;
+            const teacherIsPresent = checkedInTeacherIds.has(sched.teacherId);
+
+            // Time calculations
+            const sessionStartDt = new Date(`${today}T${sched.startTime}`);
+            const sessionEndDt = new Date(`${today}T${sched.endTime}`);
+            const startMs = sessionStartDt.getTime();
+            const endMs = sessionEndDt.getTime();
+            const nowMs = jakartaTime.getTime();
+
+            // Check if there's an existing session and its status
+            const existingSession = sessionByScheduleId[sched.id];
+            const sessionStarted = existingSession && (existingSession.status === 'ongoing' || existingSession.status === 'completed');
+
+            // Skip if teacher is present AND has already started the session (or session completed)
+            if (teacherIsPresent && sessionStarted) continue;
+
+            // Skip if teacher is present AND class hasn't started yet (they'll likely show up)
+            if (teacherIsPresent && nowMs < startMs) continue;
+
+            // Skip if class time has ended and no session was created (nothing to substitute anymore)
+            if (nowMs > endMs && !existingSession) continue;
 
             // Find or create the session for this schedule today
             const [session] = await Session.findOrCreate({
@@ -678,8 +772,10 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
                 },
             });
 
-            // Skip if already has a substitute assigned
             const sess = session as any;
+            // If session is already completed or ongoing (started by teacher), skip
+            if (sess.status === 'completed' || sess.status === 'ongoing') continue;
+
             let substituteTeacher = null;
             let substituteCheckedIn = false;
             if (sess.substituteTeacherId) {
@@ -692,13 +788,7 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
                 substituteCheckedIn = checkedInTeacherIds.has(sess.substituteTeacherId);
             }
 
-            // Time calculations — TZ=Asia/Jakarta means these parse as WIB
-            const sessionStartDt = new Date(`${today}T${sched.startTime}`);
-            const sessionEndDt = new Date(`${today}T${sched.endTime}`);
-            const startMs = sessionStartDt.getTime();
-            const endMs = sessionEndDt.getTime();
-            const nowMs = jakartaTime.getTime();
-            const countdownMs = startMs - nowMs; // Milliseconds to start
+            const countdownMs = startMs - nowMs;
             const countdownMins = Math.round(countdownMs / 60000);
 
             // Session status determination
@@ -714,8 +804,7 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
                 sessionStatus = 'completed';
             }
 
-            // Warning: ongoing session without any teacher present
-            // At this point, original teacher is absent (filtered above). Check if substitute is present.
+            // Warning: class time has started but no teacher is actively teaching
             const hasAnyTeacher = substituteCheckedIn;
             const warning = sessionStatus === 'ongoing' && !hasAnyTeacher;
 
@@ -738,6 +827,8 @@ export const getUpcomingSessions = async (req: Request, res: Response): Promise<
                 // Status
                 sessionStatus,
                 warning,
+                // Why this session needs attention
+                reason: teacherIsPresent ? 'not_started' : 'absent',
                 class: sched.class ? { id: sched.class.id, name: sched.class.name } : null,
                 subject: sched.subject ? { id: sched.subject.id, name: sched.subject.name, code: sched.subject.code } : null,
                 teacher: sched.teacher ? { id: sched.teacher.id, name: sched.teacher.user?.name } : null,
@@ -850,12 +941,9 @@ export const getAvailableTeachers = async (req: Request, res: Response): Promise
         }
 
         // 2. Find teachers who are busy right now
-        // A teacher is busy if:
-        //   (a) They have a Session with status='ongoing' in the DB (explicitly started), OR
-        //   (b) They have a schedule in the current time window AND they've checked in (at school, should be teaching)
+        // A teacher is busy ONLY if they have an ongoing session (explicitly started via QR scan)
         const currentlyTeachingIds = new Set<number>();
 
-        // 2a. Check DB session status
         const ongoingSessions = await Session.findAll({
             where: {
                 date: today,
@@ -866,23 +954,6 @@ export const getAvailableTeachers = async (req: Request, res: Response): Promise
         for (const s of ongoingSessions as any[]) {
             if (s.schedule?.teacherId) currentlyTeachingIds.add(s.schedule.teacherId);
             if (s.substituteTeacherId) currentlyTeachingIds.add(s.substituteTeacherId);
-        }
-
-        // 2b. Check schedule time window — teachers who have a class right now and are checked in
-        const activeSchedules = await Schedule.findAll({
-            where: {
-                dayOfWeek,
-                isActive: true,
-                startTime: { [Op.lte]: currentTime },
-                endTime: { [Op.gt]: currentTime },
-            },
-            attributes: ['teacherId'],
-        });
-        for (const sched of activeSchedules as any[]) {
-            // Only mark as busy if teacher has actually checked in (present at school)
-            if (stillInBuildingIds.has(sched.teacherId)) {
-                currentlyTeachingIds.add(sched.teacherId);
-            }
         }
 
         // 3. Get all teachers

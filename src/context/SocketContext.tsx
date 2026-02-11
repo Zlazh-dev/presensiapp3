@@ -12,8 +12,8 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { token, user } = useAuth();
-    const [socket, setSocket] = useState<Socket | null>(null);
+    const { token } = useAuth();
+    const [_socket, setSocket] = useState<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [sessionsSocket, setSessionsSocket] = useState<Socket | null>(null);
 

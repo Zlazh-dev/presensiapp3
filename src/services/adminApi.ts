@@ -153,6 +153,14 @@ export const adminApi = {
     const response = await api.get('/admin/recent');
     return response.data;
   },
+
+  // ========== ANALYTICS ==========
+
+  // Get analytics data
+  getAnalytics: async (start: string, end: string): Promise<any> => {
+    const response = await api.get('/admin/analytics', { params: { start, end } });
+    return response.data;
+  },
 };
 
 export interface Mapel {

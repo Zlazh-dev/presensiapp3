@@ -15,13 +15,16 @@ import {
     getDashboardStats,
     getRecentActivity,
     cleanupAttendance,
+    getAnalytics,
+    getTeacherLeaves,
 } from '../controllers/adminController';
-import { authenticate } from '../middlewares/auth';
+import { authenticate, authorize } from '../middlewares/auth';
 
 const router = Router();
 
-// All admin routes require authentication
+// All admin routes require authentication AND admin role
 router.use(authenticate);
+router.use(authorize('admin'));
 
 // ========== USER MANAGEMENT ==========
 
@@ -128,6 +131,20 @@ router.get('/stats', getDashboardStats);
  * @access  Admin
  */
 router.get('/recent', getRecentActivity);
+
+/**
+ * @route   GET /api/admin/analytics
+ * @desc    Get analytics data (trend, ranking, heatmap, report card)
+ * @access  Admin
+ */
+router.get('/analytics', getAnalytics);
+
+/**
+ * @route   GET /api/admin/teacher-leaves
+ * @desc    Get all teacher leave/sick records
+ * @access  Admin
+ */
+router.get('/teacher-leaves', getTeacherLeaves);
 
 // ========== DATA CLEANUP ==========
 

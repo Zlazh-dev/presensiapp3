@@ -43,7 +43,7 @@ async function fixMissingTeachers() {
                 await Teacher.create({
                     userId: user.id,
                     employeeId: `EMP${user.id}`,
-                    phone: null,
+                    phone: undefined,
                 });
                 console.log(`✅ CREATED: Teacher record for "${user.name}" (User ID: ${user.id}, Employee ID: EMP${user.id})`);
                 created++;

@@ -51,12 +51,13 @@ export const getGuruRegular = async (req: Request, res: Response): Promise<void>
             status: r.status,
             lateMinutes: r.lateMinutes || null,
             statusLabel: r.status === 'late' && r.lateMinutes
-                ? `Telat ${r.lateMinutes} menit`
+                ? `Terlambat ${r.lateMinutes} menit`
                 : r.status === 'present' ? 'Hadir'
                     : r.status === 'absent' ? 'Absen'
                         : r.status === 'sick' ? 'Sakit'
                             : r.status === 'permission' ? 'Izin'
-                                : r.status,
+                                : r.status === 'alpha' ? 'Tanpa Keterangan'
+                                    : r.status,
             checkInTime: r.checkInTime,
             checkOutTime: r.checkOutTime,
             earlyCheckoutMinutes: r.earlyCheckoutMinutes || null,
@@ -87,9 +88,10 @@ const deduplicateSessions = (sessions: any[]): any[] => {
         const classId = schedule?.classId;
         const subjectId = schedule?.subjectId;
         const date = session.date;
+        const scheduleId = session.scheduleId;
 
-        // Create unique key: teacherId-date-classId-subjectId
-        const key = `${teacherId}-${date}-${classId}-${subjectId}`;
+        // Create unique key: teacherId-date-classId-subjectId-scheduleId
+        const key = `${teacherId}-${date}-${classId}-${subjectId}-${scheduleId}`;
 
         if (!uniqueMap.has(key)) {
             uniqueMap.set(key, session);
@@ -120,10 +122,10 @@ export const getGuruMengajar = async (req: Request, res: Response): Promise<void
 
         const whereClause: any = {
             date: { [Op.between]: [start as string, end as string] },
-            status: { [Op.in]: ['ongoing', 'completed'] }, // Only active or completed sessions
+            status: 'ongoing', // Only active sessions (checked in, not yet checked out)
         };
 
-        // Get sessions with full schedule info
+        // Get sessions with full schedule info + substitute teacher data
         const sessions = await Session.findAll({
             where: whereClause,
             include: [
@@ -141,9 +143,15 @@ export const getGuruMengajar = async (req: Request, res: Response): Promise<void
                     ],
                 },
                 {
+                    model: Teacher,
+                    as: 'substituteTeacher',
+                    required: false,
+                    include: [{ model: User, as: 'user', attributes: ['id', 'name'] }],
+                },
+                {
                     model: TeacherAttendance,
                     as: 'teacherAttendance',
-                    required: true, // Only sessions with attendance record
+                    required: false, // Include sessions without attendance (alpha)
                 },
             ],
             order: [['date', 'DESC'], ['startTime', 'DESC']],
@@ -166,7 +174,15 @@ export const getGuruMengajar = async (req: Request, res: Response): Promise<void
         const rows = deduplicated.map((s: any) => {
             const schedule = s.schedule;
             const attendance = s.teacherAttendance?.[0];
-            const teacher = schedule?.teacher;
+            const originalTeacher = schedule?.teacher;
+            const subTeacher = s.substituteTeacher;
+            const isSubstitute = s.substituteTeacherId != null;
+
+            // Use substitute teacher info when present, otherwise original
+            const actualTeacher = isSubstitute ? subTeacher : originalTeacher;
+            const actualTeacherName = actualTeacher?.user?.name || 'Unknown';
+            const actualTeacherId = isSubstitute ? s.substituteTeacherId : schedule?.teacherId;
+            const actualEmployeeId = actualTeacher?.employeeId;
 
             // Calculate duration in minutes
             let durationMinutes = 0;
@@ -176,22 +192,34 @@ export const getGuruMengajar = async (req: Request, res: Response): Promise<void
                 durationMinutes = Math.round((checkOut.getTime() - checkIn.getTime()) / 60000);
             }
 
+            // Determine effective status & label
+            const effectiveStatus = attendance?.status || 'alpha';
+            let statusLabel: string;
+            if (effectiveStatus === 'alpha') {
+                statusLabel = 'Tanpa Keterangan';
+            } else if (s.status === 'completed') {
+                statusLabel = 'Selesai';
+            } else {
+                statusLabel = 'Aktif';
+            }
+
             return {
                 id: s.id,
                 date: s.date,
-                teacherId: schedule?.teacherId,
-                teacherName: teacher?.user?.name || 'Unknown',
-                employeeId: teacher?.employeeId,
+                teacherId: actualTeacherId,
+                teacherName: actualTeacherName,
+                employeeId: actualEmployeeId,
                 className: schedule?.class?.name || 'Unknown',
                 subjectName: schedule?.subject?.name || 'Unknown',
-                status: attendance?.status || 'present',
-                statusLabel: s.status === 'completed' ? 'Selesai' : 'Aktif',
-                checkInTime: attendance?.checkInTime || s.startTime,
+                status: effectiveStatus,
+                statusLabel,
+                checkInTime: attendance?.checkInTime || null,
                 checkOutTime: attendance?.checkOutTime || null,
                 durationMinutes,
                 sessionStatus: s.status,
                 notes: s.notes || attendance?.notes,
-                isSubstitute: s.substituteTeacherId != null,
+                isSubstitute,
+                originalTeacherName: isSubstitute ? (originalTeacher?.user?.name || 'Unknown') : null,
             };
         });
 
@@ -214,17 +242,17 @@ export const getGuruMengajar = async (req: Request, res: Response): Promise<void
  */
 export const getGuruClass = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { start, end } = req.query;
+        const { start, end, guruId } = req.query;
         if (!start || !end) {
             res.status(400).json({ error: 'start and end query params required' });
             return;
         }
 
-        // Get sessions in range with schedule info — only completed/ongoing (actual teaching)
+        // Get sessions in range with schedule info — include all non-cancelled sessions
         const sessions = await Session.findAll({
             where: {
                 date: { [Op.between]: [start as string, end as string] },
-                status: { [Op.in]: ['ongoing', 'completed'] },
+                status: { [Op.in]: ['scheduled', 'ongoing', 'completed'] },
             },
             include: [
                 {
@@ -243,6 +271,7 @@ export const getGuruClass = async (req: Request, res: Response): Promise<void> =
                 {
                     model: TeacherAttendance,
                     as: 'teacherAttendance',
+                    required: false, // Include sessions without attendance (alpha/no_record)
                     include: [{ model: Teacher, as: 'teacher', include: [{ model: User, as: 'user', attributes: ['name'] }] }]
                 },
             ],
@@ -250,7 +279,15 @@ export const getGuruClass = async (req: Request, res: Response): Promise<void> =
         });
 
         // Deduplicate: same teacher-date-class-subject combo
-        const deduplicated = deduplicateSessions(sessions as any[]);
+        let deduplicated = deduplicateSessions(sessions as any[]);
+
+        // Filter by guruId if provided
+        if (guruId) {
+            const teacherIdNum = Number(guruId);
+            deduplicated = deduplicated.filter((s: any) =>
+                s.schedule?.teacherId === teacherIdNum
+            );
+        }
 
         // Group by class
         const classMap = new Map<number, any>();
@@ -602,7 +639,10 @@ export const exportAttendance = async (req: Request, res: Response): Promise<voi
                 const statusLabel = att?.status === 'present' ? 'Hadir'
                     : att?.status === 'late' ? 'Terlambat'
                         : att?.status === 'absent' ? 'Absen'
-                            : 'Tidak ada data';
+                            : att?.status === 'alpha' ? 'Tanpa Keterangan'
+                                : att?.status === 'sick' ? 'Sakit'
+                                    : att?.status === 'permission' ? 'Izin'
+                                        : 'Tidak ada data';
                 rows.push({
                     Tanggal: s.date,
                     'Jam Mulai': s.startTime?.substring(0, 5) || '-',

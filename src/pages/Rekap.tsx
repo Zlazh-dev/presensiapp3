@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { format, subDays } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import {
     ClipboardList, Users, UserCheck, Calendar, Download,
     ChevronDown, ChevronRight, BookOpen, TrendingUp,
-    RefreshCw, GraduationCap, FileText,
+    RefreshCw, GraduationCap, FileText, AlertCircle, Clock,
+    CheckCircle, XCircle,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -131,6 +133,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
         absent: { bg: 'bg-red-100', text: 'text-red-700', label: 'Absen' },
         sick: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Sakit' },
         permission: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Izin' },
+        alpha: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Tanpa Keterangan' },
         no_record: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Tidak ada data' },
     };
     const c = config[status] || config.no_record;
@@ -158,13 +161,73 @@ const StatCard: React.FC<{ label: string; value: string | number; icon: React.Re
     </div>
 );
 
+// ─── Status Breakdown Bar ────────────────────────────────
+const StatusBreakdown: React.FC<{
+    rows: Array<{ status: string }>;
+    description?: string;
+}> = ({ rows, description }) => {
+    const counts = useMemo(() => {
+        const c = { present: 0, late: 0, permission: 0, sick: 0, alpha: 0, absent: 0 };
+        rows.forEach((r) => {
+            const s = r.status as keyof typeof c;
+            if (s in c) c[s]++;
+        });
+        return c;
+    }, [rows]);
+    const total = rows.length;
+    if (total === 0) return null;
+
+    const items = [
+        { label: 'Hadir', count: counts.present, color: 'bg-emerald-500', textColor: 'text-emerald-700', bgLight: 'bg-emerald-50' },
+        { label: 'Terlambat', count: counts.late, color: 'bg-amber-500', textColor: 'text-amber-700', bgLight: 'bg-amber-50' },
+        { label: 'Izin', count: counts.permission, color: 'bg-purple-500', textColor: 'text-purple-700', bgLight: 'bg-purple-50' },
+        { label: 'Sakit', count: counts.sick, color: 'bg-blue-500', textColor: 'text-blue-700', bgLight: 'bg-blue-50' },
+        { label: 'Alpha', count: counts.alpha + counts.absent, color: 'bg-red-500', textColor: 'text-red-700', bgLight: 'bg-red-50' },
+    ];
+
+    return (
+        <div className="mb-4 space-y-3">
+            {description && (
+                <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-gray-400" />
+                    {description}
+                </p>
+            )}
+            {/* Stacked progress bar */}
+            <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
+                {items.map((item) =>
+                    item.count > 0 ? (
+                        <div
+                            key={item.label}
+                            className={`${item.color} transition-all duration-500`}
+                            style={{ width: `${(item.count / total) * 100}%` }}
+                            title={`${item.label}: ${item.count}`}
+                        />
+                    ) : null
+                )}
+            </div>
+            {/* Count pills */}
+            <div className="flex flex-wrap gap-2">
+                {items.map((item) => (
+                    <div key={item.label} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${item.bgLight} ${item.count === 0 ? 'opacity-40' : ''}`}>
+                        <div className={`w-2 h-2 rounded-full ${item.color}`} />
+                        <span className={`text-xs font-semibold ${item.textColor}`}>{item.count}</span>
+                        <span className="text-xs text-gray-500">{item.label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // ─── Guru Reguler Tab ────────────────────────────────────
-const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) => {
+const GuruReguler: React.FC<{ start: string; end: string; forceGuruId?: number }> = ({ start, end, forceGuruId }) => {
     const [selectedGuruId, setSelectedGuruId] = useState<string>('');
+    const effectiveGuruId = forceGuruId ? String(forceGuruId) : selectedGuruId;
 
     const { data, isLoading } = useQuery({
-        queryKey: ['guru-regular', start, end, selectedGuruId],
-        queryFn: () => apiFetch(`/api/attendance/guru/regular?start=${start}&end=${end}${selectedGuruId ? `&guruId=${selectedGuruId}` : ''}`),
+        queryKey: ['guru-regular', start, end, effectiveGuruId],
+        queryFn: () => apiFetch(`/api/attendance/guru/regular?start=${start}&end=${end}${effectiveGuruId ? `&guruId=${effectiveGuruId}` : ''}`),
         enabled: !!start && !!end,
     });
 
@@ -216,17 +279,19 @@ const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) =
                         Kehadiran Reguler — {rows.length} data
                     </h3>
                     <div className="flex items-center gap-2 flex-wrap">
-                        {/* Guru filter dropdown */}
-                        <select
-                            value={selectedGuruId}
-                            onChange={(e) => setSelectedGuruId(e.target.value)}
-                            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none flex-1 sm:flex-none min-w-0"
-                        >
-                            <option value="">Semua Guru</option>
-                            {teachers.map((t) => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
+                        {/* Guru filter dropdown - hidden when forceGuruId is set (teacher role) */}
+                        {!forceGuruId && (
+                            <select
+                                value={selectedGuruId}
+                                onChange={(e) => setSelectedGuruId(e.target.value)}
+                                className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none flex-1 sm:flex-none min-w-0"
+                            >
+                                <option value="">Semua Guru</option>
+                                {teachers.map((t) => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
+                        )}
 
                         {/* PDF Export */}
                         <button
@@ -249,6 +314,10 @@ const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) =
                     </div>
                 </div>
             </div>
+            <StatusBreakdown
+                rows={rows}
+                description="Kehadiran harian guru (check-in/check-out) di luar sesi mengajar"
+            />
             {isLoading ? (
                 <div className="flex items-center justify-center py-16">
                     <RefreshCw className="w-6 h-6 text-gray-300 animate-spin" />
@@ -296,7 +365,18 @@ const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) =
                                             <span className="text-gray-300">-</span>
                                         )}
                                     </td>
-                                    <td className="px-5 py-3 text-gray-500 truncate max-w-[200px]">{r.notes || '-'}</td>
+                                    <td className="px-5 py-3 text-gray-500 max-w-[200px]">
+                                        {(r.status === 'sick' || r.status === 'permission') && r.notes ? (
+                                            <span className="inline-flex items-center gap-1 text-xs">
+                                                <AlertCircle className="w-3 h-3 text-gray-400" />
+                                                <span className="truncate">{r.notes}</span>
+                                            </span>
+                                        ) : r.notes ? (
+                                            <span className="truncate text-xs">{r.notes}</span>
+                                        ) : (
+                                            <span className="text-gray-300">-</span>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -309,12 +389,13 @@ const GuruReguler: React.FC<{ start: string; end: string }> = ({ start, end }) =
 
 // ─── Guru Per Sesi Mengajar (KBM) Tab ────────────────────
 // SINGLE SOURCE OF TRUTH: Uses ONLY sessions table
-const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) => {
+const GuruMengajar: React.FC<{ start: string; end: string; forceGuruId?: number }> = ({ start, end, forceGuruId }) => {
     const [selectedGuruId, setSelectedGuruId] = useState<string>('');
+    const effectiveGuruId = forceGuruId ? String(forceGuruId) : selectedGuruId;
 
     const { data, isLoading } = useQuery({
-        queryKey: ['guru-mengajar', start, end, selectedGuruId],
-        queryFn: () => apiFetch(`/api/attendance/guru/mengajar?start=${start}&end=${end}${selectedGuruId ? `&guruId=${selectedGuruId}` : ''}`),
+        queryKey: ['guru-mengajar', start, end, effectiveGuruId],
+        queryFn: () => apiFetch(`/api/attendance/guru/mengajar?start=${start}&end=${end}${effectiveGuruId ? `&guruId=${effectiveGuruId}` : ''}`),
         enabled: !!start && !!end,
     });
 
@@ -367,17 +448,19 @@ const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) 
                         <span>Mengajar (KBM) — {rows.length} sesi</span>
                     </h3>
                     <div className="flex items-center gap-2 flex-wrap">
-                        {/* Guru filter dropdown */}
-                        <select
-                            value={selectedGuruId}
-                            onChange={(e) => setSelectedGuruId(e.target.value)}
-                            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none flex-1 sm:flex-none min-w-0"
-                        >
-                            <option value="">Semua Guru</option>
-                            {teachers.map((t) => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
+                        {/* Guru filter dropdown - hidden when forceGuruId is set (teacher role) */}
+                        {!forceGuruId && (
+                            <select
+                                value={selectedGuruId}
+                                onChange={(e) => setSelectedGuruId(e.target.value)}
+                                className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none flex-1 sm:flex-none min-w-0"
+                            >
+                                <option value="">Semua Guru</option>
+                                {teachers.map((t) => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
+                        )}
 
                         {/* PDF Export */}
                         <button
@@ -391,6 +474,10 @@ const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) 
                     </div>
                 </div>
             </div>
+            <StatusBreakdown
+                rows={rows}
+                description="Kehadiran guru per sesi KBM — terlambat jika check-in >10 menit setelah jadwal"
+            />
             {isLoading ? (
                 <div className="flex items-center justify-center py-16">
                     <RefreshCw className="w-6 h-6 text-gray-300 animate-spin" />
@@ -412,7 +499,9 @@ const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) 
                                 <th className="px-5 py-3 text-center font-semibold text-gray-600">Masuk</th>
                                 <th className="px-5 py-3 text-center font-semibold text-gray-600">Keluar</th>
                                 <th className="px-5 py-3 text-center font-semibold text-gray-600">Durasi</th>
+                                <th className="px-5 py-3 text-center font-semibold text-gray-600">Sesi</th>
                                 <th className="px-5 py-3 text-center font-semibold text-gray-600">Status</th>
+                                <th className="px-5 py-3 text-left font-semibold text-gray-600">Catatan</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -441,12 +530,39 @@ const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) 
                                         )}
                                     </td>
                                     <td className="px-5 py-3 text-center">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${r.sessionStatus === 'completed'
-                                            ? 'bg-emerald-50 text-emerald-700'
-                                            : 'bg-amber-50 text-amber-700'
+                                        {r.sessionStatus === 'completed' ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+                                                <CheckCircle className="w-3 h-3" />
+                                                Tuntas
+                                            </span>
+                                        ) : r.sessionStatus === 'active' ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                                                <Clock className="w-3 h-3" />
+                                                Aktif
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                                                <XCircle className="w-3 h-3" />
+                                                Belum
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-5 py-3 text-center">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${r.status === 'alpha'
+                                            ? 'bg-orange-50 text-orange-700'
+                                            : r.sessionStatus === 'completed'
+                                                ? 'bg-emerald-50 text-emerald-700'
+                                                : 'bg-amber-50 text-amber-700'
                                             }`}>
                                             {r.statusLabel}
                                         </span>
+                                    </td>
+                                    <td className="px-5 py-3 text-gray-500 max-w-[180px]">
+                                        {r.notes ? (
+                                            <span className="truncate text-xs">{r.notes}</span>
+                                        ) : (
+                                            <span className="text-gray-300">-</span>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -459,12 +575,12 @@ const GuruMengajar: React.FC<{ start: string; end: string }> = ({ start, end }) 
 };
 
 // ─── Guru Per Kelas Tab ──────────────────────────────────
-const GuruPerKelas: React.FC<{ start: string; end: string }> = ({ start, end }) => {
+const GuruPerKelas: React.FC<{ start: string; end: string; forceGuruId?: number }> = ({ start, end, forceGuruId }) => {
     const [expanded, setExpanded] = useState<number | null>(null);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['guru-class', start, end],
-        queryFn: () => apiFetch(`/api/attendance/guru/class?start=${start}&end=${end}`),
+        queryKey: ['guru-class', start, end, forceGuruId],
+        queryFn: () => apiFetch(`/api/attendance/guru/class?start=${start}&end=${end}${forceGuruId ? `&guruId=${forceGuruId}` : ''}`),
         enabled: !!start && !!end,
     });
 
@@ -499,7 +615,10 @@ const GuruPerKelas: React.FC<{ start: string; end: string }> = ({ start, end }) 
                 s.status === 'present' ? 'Hadir'
                     : s.status === 'late' ? 'Terlambat'
                         : s.status === 'absent' ? 'Absen'
-                            : 'Tidak ada data',
+                            : s.status === 'alpha' ? 'Tanpa Keterangan'
+                                : s.status === 'sick' ? 'Sakit'
+                                    : s.status === 'permission' ? 'Izin'
+                                        : 'Tidak ada data',
             ]),
             styles: { fontSize: 8 },
             headStyles: { fillColor: [59, 130, 246] },
@@ -874,6 +993,10 @@ const SiswaTab: React.FC<{ start: string; end: string }> = ({ start, end }) => {
 
 // ─── Main Rekap Component ────────────────────────────────
 const Rekap: React.FC = () => {
+    const { user } = useAuth();
+    const isTeacher = user?.role === 'teacher' || user?.role === 'guru';
+    const myTeacherId = user?.teacherId;
+
     // Default: this week
     const today = new Date();
     const [dateRange, setDateRange] = useState({
@@ -883,14 +1006,16 @@ const Rekap: React.FC = () => {
     const [mainTab, setMainTab] = useState<'guru' | 'siswa'>('guru');
     const [guruSubTab, setGuruSubTab] = useState<'reguler' | 'mengajar' | 'kelas'>('reguler');
 
-    // Quick-fetch stats for header cards
+    // Quick-fetch stats for header cards (teacher: only own data)
+    const guruStatsGuruId = isTeacher && myTeacherId ? `&guruId=${myTeacherId}` : '';
     const { data: guruData } = useQuery({
-        queryKey: ['guru-regular', dateRange.start, dateRange.end],
-        queryFn: () => apiFetch(`/api/attendance/guru/regular?start=${dateRange.start}&end=${dateRange.end}`),
+        queryKey: ['guru-regular', dateRange.start, dateRange.end, myTeacherId],
+        queryFn: () => apiFetch(`/api/attendance/guru/regular?start=${dateRange.start}&end=${dateRange.end}${guruStatsGuruId}`),
     });
     const { data: siswaData } = useQuery({
         queryKey: ['siswa-summary', dateRange.start, dateRange.end],
         queryFn: () => apiFetch(`/api/attendance/siswa/summary?start=${dateRange.start}&end=${dateRange.end}`),
+        enabled: !isTeacher, // Only fetch siswa data for admin
     });
 
     const guruRows: GuruRegularRow[] = guruData?.rows || [];
@@ -918,7 +1043,7 @@ const Rekap: React.FC = () => {
                         <ClipboardList className="w-7 h-7 text-amber-600" />
                         Rekap Kehadiran
                     </h1>
-                    <p className="text-gray-500 mt-1">Statistik kehadiran guru dan siswa</p>
+                    <p className="text-gray-500 mt-1">{isTeacher ? 'Rekap kehadiran Anda' : 'Statistik kehadiran guru dan siswa'}</p>
                 </div>
 
                 {/* Date Filter */}
@@ -941,9 +1066,9 @@ const Rekap: React.FC = () => {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={`grid gap-3 ${isTeacher ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
                 <StatCard
-                    label="Kehadiran Guru"
+                    label={isTeacher ? 'Kehadiran Anda' : 'Kehadiran Guru'}
                     value={`${guruStats.pct}%`}
                     icon={<TrendingUp className="w-5 h-5 text-emerald-600" />}
                     color="bg-emerald-50"
@@ -954,83 +1079,91 @@ const Rekap: React.FC = () => {
                     icon={<UserCheck className="w-5 h-5 text-blue-600" />}
                     color="bg-blue-50"
                 />
-                <StatCard
-                    label="Kehadiran Siswa"
-                    value={`${siswaStats.pct}%`}
-                    icon={<TrendingUp className="w-5 h-5 text-purple-600" />}
-                    color="bg-purple-50"
-                />
-                <StatCard
-                    label="Total Siswa"
-                    value={siswaStats.totalStudents}
-                    icon={<Users className="w-5 h-5 text-teal-600" />}
-                    color="bg-teal-50"
-                />
+                {!isTeacher && (
+                    <>
+                        <StatCard
+                            label="Kehadiran Siswa"
+                            value={`${siswaStats.pct}%`}
+                            icon={<TrendingUp className="w-5 h-5 text-purple-600" />}
+                            color="bg-purple-50"
+                        />
+                        <StatCard
+                            label="Total Siswa"
+                            value={siswaStats.totalStudents}
+                            icon={<Users className="w-5 h-5 text-teal-600" />}
+                            color="bg-teal-50"
+                        />
+                    </>
+                )}
             </div>
 
-            {/* Main Tabs: Guru | Siswa */}
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-fit">
-                <button
-                    onClick={() => setMainTab('guru')}
-                    className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition ${mainTab === 'guru'
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                >
-                    <UserCheck className="w-4 h-4" />
-                    Guru
-                </button>
-                <button
-                    onClick={() => setMainTab('siswa')}
-                    className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition ${mainTab === 'siswa'
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                >
-                    <GraduationCap className="w-4 h-4" />
-                    Siswa
-                </button>
-            </div>
+            {/* Main Tabs: Guru | Siswa (Siswa hidden for teacher role) */}
+            {!isTeacher ? (
+                <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-fit">
+                    <button
+                        onClick={() => setMainTab('guru')}
+                        className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition ${mainTab === 'guru'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                    >
+                        <UserCheck className="w-4 h-4" />
+                        Guru
+                    </button>
+                    <button
+                        onClick={() => setMainTab('siswa')}
+                        className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition ${mainTab === 'siswa'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                    >
+                        <GraduationCap className="w-4 h-4" />
+                        Siswa
+                    </button>
+                </div>
+            ) : null}
 
             {/* Tab Content */}
             {mainTab === 'guru' && (
                 <div className="space-y-4">
                     {/* Sub-tabs */}
-                    {/* Sub-tabs */}
                     <div className="flex gap-1 sm:gap-4 border-b border-gray-200 mb-4 px-1 overflow-x-auto scrollbar-hide">
                         <button
                             onClick={() => setGuruSubTab('reguler')}
-                            className={`px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'reguler'
+                            className={`flex items-center gap-1.5 px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'reguler'
                                 ? 'border-amber-500 text-amber-700'
                                 : 'border-transparent text-gray-400 hover:text-gray-600'
                                 }`}
                         >
-                            Reguler
+                            <ClipboardList className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Kehadiran</span> Reguler
                         </button>
                         <button
                             onClick={() => setGuruSubTab('mengajar')}
-                            className={`px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'mengajar'
+                            className={`flex items-center gap-1.5 px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'mengajar'
                                 ? 'border-emerald-500 text-emerald-700'
                                 : 'border-transparent text-gray-400 hover:text-gray-600'
                                 }`}
                         >
-                            Mengajar
+                            <BookOpen className="w-3.5 h-3.5" />
+                            Per Sesi <span className="hidden sm:inline">KBM</span>
                         </button>
                         <button
                             onClick={() => setGuruSubTab('kelas')}
-                            className={`px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'kelas'
+                            className={`flex items-center gap-1.5 px-2 sm:px-3 pb-2 text-xs sm:text-sm font-medium transition border-b-2 whitespace-nowrap ${guruSubTab === 'kelas'
                                 ? 'border-blue-500 text-blue-700'
                                 : 'border-transparent text-gray-400 hover:text-gray-600'
                                 }`}
                         >
+                            <Users className="w-3.5 h-3.5" />
                             Per Kelas
                         </button>
                     </div>
 
                     <div className="mt-2">
-                        {guruSubTab === 'reguler' && <GuruReguler start={dateRange.start} end={dateRange.end} />}
-                        {guruSubTab === 'mengajar' && <GuruMengajar start={dateRange.start} end={dateRange.end} />}
-                        {guruSubTab === 'kelas' && <GuruPerKelas start={dateRange.start} end={dateRange.end} />}
+                        {guruSubTab === 'reguler' && <GuruReguler start={dateRange.start} end={dateRange.end} forceGuruId={isTeacher ? myTeacherId : undefined} />}
+                        {guruSubTab === 'mengajar' && <GuruMengajar start={dateRange.start} end={dateRange.end} forceGuruId={isTeacher ? myTeacherId : undefined} />}
+                        {guruSubTab === 'kelas' && <GuruPerKelas start={dateRange.start} end={dateRange.end} forceGuruId={isTeacher ? myTeacherId : undefined} />}
                     </div>
                 </div>
             )}

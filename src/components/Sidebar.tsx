@@ -15,6 +15,8 @@ import {
     GraduationCap,
     Users,
     BookOpen,
+    BarChart3,
+    FileText,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -40,18 +42,21 @@ const Sidebar: React.FC = () => {
     // Role-based menu items
     const adminItems: SidebarItem[] = [
         { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+        { label: 'Analitik', path: '/analitik', icon: BarChart3 },
         { label: 'Manajemen User', path: '/admin/users', icon: Users },
         { label: 'Mata Pelajaran', path: '/admin/mapel', icon: BookOpen },
         { label: 'Manajemen Kelas', path: '/manajemen-kelas', icon: GraduationCap },
         { label: 'Jadwal', path: '/jadwal', icon: Calendar },
         { label: 'Guru Pengganti', path: '/guru-pengganti', icon: UserCheck },
         { label: 'Rekap', path: '/rekap', icon: ClipboardList },
+        { label: 'Izin Guru', path: '/izin-guru', icon: FileText },
         { label: 'Pengaturan', path: '/settings', icon: Settings },
     ];
 
     const teacherItems: SidebarItem[] = [
         { label: 'Dashboard', path: '/dashboard-guru', icon: LayoutDashboard },
         { label: 'Sesi Mengajar', path: '/sesi-mengajar', icon: BookOpen },
+        { label: 'Jadwal Saya', path: '/guru/jadwal', icon: Calendar },
         { label: 'Rekap Kehadiran', path: '/guru/rekap', icon: ClipboardList },
     ];
 

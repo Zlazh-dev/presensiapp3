@@ -1,11 +1,134 @@
 import { Response } from 'express';
-import { Attendance, User, Student, Teacher, Class } from '../models';
+import { Op } from 'sequelize';
+import { TeacherAttendance, StudentAttendance, User, Student, Teacher, Class, Session, Schedule, Subject } from '../models';
 import { AuthRequest } from '../middlewares/auth';
-import { createObjectCsvWriter } from 'csv-writer';
-import ExcelJS from 'exceljs';
-import path from 'path';
-import fs from 'fs';
+import * as XLSX from 'xlsx';
 
+/**
+ * Helper: Gather combined attendance data for a date range
+ * Returns teacher + student attendance rows with proper labels
+ */
+const getAttendanceData = async (startDate: string, endDate: string) => {
+    // === Teacher Regular Attendance ===
+    const teacherRecords = await TeacherAttendance.findAll({
+        where: {
+            date: { [Op.between]: [startDate, endDate] },
+            sessionId: { [Op.is]: null as any },
+        },
+        include: [{
+            model: Teacher,
+            as: 'teacher',
+            include: [{ model: User, as: 'user', attributes: ['name'] }],
+        }],
+        order: [['date', 'ASC'], ['createdAt', 'ASC']],
+    });
+
+    const teacherRows = teacherRecords.map((r: any) => ({
+        Tanggal: r.date,
+        Nama: r.teacher?.user?.name || 'Unknown',
+        Tipe: 'Guru',
+        Kategori: 'Reguler',
+        Status: getStatusLabel(r.status),
+        'Jam Masuk': r.checkInTime || '-',
+        'Jam Keluar': r.checkOutTime || '-',
+        Keterangan: r.notes || '-',
+    }));
+
+    // === Teacher Session Attendance ===
+    const sessionRecords = await TeacherAttendance.findAll({
+        where: {
+            date: { [Op.between]: [startDate, endDate] },
+            sessionId: { [Op.ne]: null as any },
+        },
+        include: [
+            {
+                model: Teacher,
+                as: 'teacher',
+                include: [{ model: User, as: 'user', attributes: ['name'] }],
+            },
+            {
+                model: Session,
+                as: 'session',
+                include: [{
+                    model: Schedule,
+                    as: 'schedule',
+                    include: [
+                        { model: Class, as: 'class', attributes: ['name'] },
+                        { model: Subject, as: 'subject', attributes: ['name'] },
+                    ],
+                }],
+            },
+        ],
+        order: [['date', 'ASC'], ['createdAt', 'ASC']],
+    });
+
+    const sessionRows = sessionRecords.map((r: any) => ({
+        Tanggal: r.date,
+        Nama: r.teacher?.user?.name || 'Unknown',
+        Tipe: 'Guru',
+        Kategori: `Sesi: ${r.session?.schedule?.class?.name || '?'} - ${r.session?.schedule?.subject?.name || '?'}`,
+        Status: getStatusLabel(r.status),
+        'Jam Masuk': r.checkInTime || '-',
+        'Jam Keluar': r.checkOutTime || '-',
+        Keterangan: r.notes || '-',
+    }));
+
+    // === Student Attendance ===
+    const studentRecords = await StudentAttendance.findAll({
+        where: {
+            createdAt: { [Op.between]: [`${startDate}T00:00:00`, `${endDate}T23:59:59`] },
+        },
+        include: [
+            {
+                model: Student,
+                as: 'student',
+                attributes: ['id', 'name', 'nis'],
+                include: [{ model: Class, as: 'class', attributes: ['name'] }],
+            },
+            {
+                model: Session,
+                as: 'session',
+                attributes: ['id', 'date'],
+                include: [{
+                    model: Schedule,
+                    as: 'schedule',
+                    include: [{ model: Subject, as: 'subject', attributes: ['name'] }],
+                }],
+            },
+        ],
+        order: [['createdAt', 'ASC']],
+    });
+
+    const studentRows = studentRecords.map((r: any) => ({
+        Tanggal: r.session?.date || '-',
+        Nama: `${r.student?.name || 'Unknown'} (${r.student?.nis || '-'})`,
+        Tipe: 'Siswa',
+        Kategori: `${r.student?.class?.name || '?'} - ${r.session?.schedule?.subject?.name || '?'}`,
+        Status: getStatusLabel(r.status),
+        'Jam Masuk': '-',
+        'Jam Keluar': '-',
+        Keterangan: r.notes || '-',
+    }));
+
+    return [...teacherRows, ...sessionRows, ...studentRows];
+};
+
+const getStatusLabel = (status: string): string => {
+    const labels: Record<string, string> = {
+        present: 'Hadir',
+        late: 'Terlambat',
+        sick: 'Sakit',
+        permission: 'Izin',
+        alpha: 'Alpha',
+        absent: 'Absent',
+    };
+    return labels[status] || status;
+};
+
+/**
+ * Export attendance as CSV
+ * GET /api/reports/attendance/csv?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ */
 export const exportCSV = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { startDate, endDate } = req.query;
@@ -15,78 +138,27 @@ export const exportCSV = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
-        const attendance = await Attendance.findAll({
-            where: {
-                date: {
-                    $between: [startDate, endDate],
-                },
-            },
-            order: [['date', 'ASC'], ['checkInTime', 'ASC']],
-        });
+        const data = await getAttendanceData(startDate as string, endDate as string);
 
-        // Prepare data with user names
-        const data = await Promise.all(
-            attendance.map(async (record) => {
-                let userName = 'Unknown';
+        // Create workbook with xlsx and convert to CSV
+        const ws = XLSX.utils.json_to_sheet(data);
+        const csv = XLSX.utils.sheet_to_csv(ws);
 
-                if (record.userType === 'teacher') {
-                    const teacher = await Teacher.findOne({
-                        where: { userId: record.userId },
-                        include: [{ model: User, as: 'user' }],
-                    });
-                    userName = teacher?.user?.name || 'Unknown';
-                } else {
-                    const student = await Student.findByPk(record.userId);
-                    userName = student?.name || 'Unknown';
-                }
+        const filename = `rekap_kehadiran_${startDate}_${endDate}.csv`;
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.send(csv);
 
-                return {
-                    date: record.date,
-                    name: userName,
-                    type: record.userType,
-                    status: record.status,
-                    checkInTime: record.checkInTime || '-',
-                    checkOutTime: record.checkOutTime || '-',
-                };
-            })
-        );
-
-        // Create CSV
-        const filename = `attendance_${startDate}_to_${endDate}.csv`;
-        const filepath = path.join(__dirname, '..', '..', 'exports', filename);
-
-        // Ensure exports directory exists
-        if (!fs.existsSync(path.dirname(filepath))) {
-            fs.mkdirSync(path.dirname(filepath), { recursive: true });
-        }
-
-        const csvWriter = createObjectCsvWriter({
-            path: filepath,
-            header: [
-                { id: 'date', title: 'Date' },
-                { id: 'name', title: 'Name' },
-                { id: 'type', title: 'Type' },
-                { id: 'status', title: 'Status' },
-                { id: 'checkInTime', title: 'Check In' },
-                { id: 'checkOutTime', title: 'Check Out' },
-            ],
-        });
-
-        await csvWriter.writeRecords(data);
-
-        res.download(filepath, filename, (err) => {
-            if (err) {
-                console.error('Download error:', err);
-            }
-            // Clean up file after download
-            fs.unlinkSync(filepath);
-        });
     } catch (error) {
         console.error('Export CSV error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
 
+/**
+ * Export attendance as XLSX
+ * GET /api/reports/attendance/xlsx?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ */
 export const exportXLSX = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { startDate, endDate } = req.query;
@@ -96,82 +168,32 @@ export const exportXLSX = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        const attendance = await Attendance.findAll({
-            where: {
-                date: {
-                    $between: [startDate, endDate],
-                },
-            },
-            order: [['date', 'ASC'], ['checkInTime', 'ASC']],
-        });
+        const data = await getAttendanceData(startDate as string, endDate as string);
 
-        // Prepare data
-        const data = await Promise.all(
-            attendance.map(async (record) => {
-                let userName = 'Unknown';
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(data);
 
-                if (record.userType === 'teacher') {
-                    const teacher = await Teacher.findOne({
-                        where: { userId: record.userId },
-                        include: [{ model: User, as: 'user' }],
-                    });
-                    userName = teacher?.user?.name || 'Unknown';
-                } else {
-                    const student = await Student.findByPk(record.userId);
-                    userName = student?.name || 'Unknown';
-                }
-
-                return {
-                    date: record.date,
-                    name: userName,
-                    type: record.userType,
-                    status: record.status,
-                    checkInTime: record.checkInTime || '-',
-                    checkOutTime: record.checkOutTime || '-',
-                };
-            })
-        );
-
-        // Create Excel workbook
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Attendance Report');
-
-        worksheet.columns = [
-            { header: 'Date', key: 'date', width: 15 },
-            { header: 'Name', key: 'name', width: 30 },
-            { header: 'Type', key: 'type', width: 10 },
-            { header: 'Status', key: 'status', width: 10 },
-            { header: 'Check In', key: 'checkInTime', width: 15 },
-            { header: 'Check Out', key: 'checkOutTime', width: 15 },
+        // Set column widths
+        ws['!cols'] = [
+            { wch: 12 },  // Tanggal
+            { wch: 28 },  // Nama
+            { wch: 8 },   // Tipe
+            { wch: 25 },  // Kategori
+            { wch: 12 },  // Status
+            { wch: 10 },  // Jam Masuk
+            { wch: 10 },  // Jam Keluar
+            { wch: 30 },  // Keterangan
         ];
 
-        worksheet.addRows(data);
+        XLSX.utils.book_append_sheet(wb, ws, 'Rekap Kehadiran');
 
-        // Style header row
-        worksheet.getRow(1).font = { bold: true };
-        worksheet.getRow(1).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFE0E0E0' },
-        };
+        const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-        const filename = `attendance_${startDate}_to_${endDate}.xlsx`;
-        const filepath = path.join(__dirname, '..', '..', 'exports', filename);
+        const filename = `rekap_kehadiran_${startDate}_${endDate}.xlsx`;
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
 
-        // Ensure exports directory exists
-        if (!fs.existsSync(path.dirname(filepath))) {
-            fs.mkdirSync(path.dirname(filepath), { recursive: true });
-        }
-
-        await workbook.xlsx.writeFile(filepath);
-
-        res.download(filepath, filename, (err) => {
-            if (err) {
-                console.error('Download error:', err);
-            }
-            // Clean up file after download
-            fs.unlinkSync(filepath);
-        });
     } catch (error) {
         console.error('Export XLSX error:', error);
         res.status(500).json({ error: 'Internal server error' });

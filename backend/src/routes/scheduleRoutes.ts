@@ -11,6 +11,7 @@ router.put('/:sessionId/substitute/:teacherId', authenticate, authorize('admin')
 
 // Existing CRUD
 router.get('/', authenticate, scheduleController.getAllSchedules);
+router.get('/my-schedule', authenticate, scheduleController.getMySchedule);
 router.post('/', authenticate, authorize('admin'), scheduleController.createSchedule);
 router.put('/:id', authenticate, authorize('admin'), scheduleController.updateSchedule);
 router.delete('/:id', authenticate, authorize('admin'), scheduleController.deleteSchedule);

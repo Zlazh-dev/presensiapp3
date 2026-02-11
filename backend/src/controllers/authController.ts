@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { User } from '../models';
+import { User, Teacher } from '../models';
 import { generateToken } from '../utils/jwt';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
@@ -107,6 +107,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
         console.log('[POST /api/auth/login] Success for:', user.username);
 
+        // Look up teacherId for teacher users
+        let teacherId: number | null = null;
+        if (user.role === 'teacher') {
+            const teacher = await Teacher.findOne({ where: { userId: user.id } });
+            teacherId = teacher?.id || null;
+        }
+
         res.json({
             token,
             user: {
@@ -115,6 +122,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
                 role: user.role,
                 name: (user as any).name || user.username,
                 email: (user as any).email,
+                teacherId,
             },
         });
     } catch (error) {

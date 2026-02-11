@@ -37,16 +37,25 @@ export const checkInSession = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
 
-        // 1. Validate Geolocation (Optional but recommended)
-        if (lat && lng) {
-            const geofence = await Geofence.findOne({ where: { isActive: true } });
-            if (geofence) {
-                const dist = calculateDistance(lat, lng, Number(geofence.latitude), Number(geofence.longitude));
-                if (dist > geofence.radiusMeters) {
-                    await t.rollback();
-                    res.status(400).json({ error: `Di luar jangkauan (${Math.round(dist)}m)` });
-                    return;
-                }
+        // 1. Validate Geolocation (MANDATORY — consistent with QR Ruang Guru)
+        if (lat === undefined || lng === undefined) {
+            await t.rollback();
+            res.status(400).json({ error: 'Lokasi GPS diperlukan. Aktifkan GPS dan izinkan akses lokasi.' });
+            return;
+        }
+
+        const geofence = await Geofence.findOne({ where: { isActive: true } });
+        if (geofence) {
+            const dist = calculateDistance(Number(lat), Number(lng), Number(geofence.latitude), Number(geofence.longitude));
+            if (dist > geofence.radiusMeters) {
+                await t.rollback();
+                res.status(400).json({
+                    error: `Di luar area geofence (${Math.round(dist)}m dari titik sekolah, max ${geofence.radiusMeters}m)`,
+                    distance: Math.round(dist),
+                    radiusMeters: geofence.radiusMeters,
+                    geofenceLabel: geofence.label,
+                });
+                return;
             }
         }
 
@@ -356,7 +365,7 @@ export const saveStudentAttendance = async (req: AuthRequest, res: Response): Pr
         const userId = req.user?.id;
 
         for (const item of statuses) {
-            const { studentId, status } = item;
+            const { studentId, status, notes } = item;
 
             // Check existing
             const existing = await StudentAttendance.findOne({
@@ -367,6 +376,7 @@ export const saveStudentAttendance = async (req: AuthRequest, res: Response): Pr
             if (existing) {
                 await existing.update({
                     status,
+                    notes: notes || null,
                     markedBy: userId,
                     markedAt: new Date()
                 }, { transaction: t });
@@ -375,6 +385,7 @@ export const saveStudentAttendance = async (req: AuthRequest, res: Response): Pr
                     sessionId: session.id,
                     studentId,
                     status,
+                    notes: notes || null,
                     markedBy: userId,
                     markedAt: new Date()
                 }, { transaction: t });

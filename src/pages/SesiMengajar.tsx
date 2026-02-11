@@ -113,6 +113,7 @@ const SesiMengajar: React.FC = () => {
     // Data for Attendance Form
     const [students, setStudents] = useState<Student[]>([]);
     const [attendance, setAttendance] = useState<Record<number, AttendanceStatus>>({});
+    const [studentNotes, setStudentNotes] = useState<Record<number, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [createdSessionId, setCreatedSessionId] = useState<number | null>(null); // To store session ID after check-in
 
@@ -162,7 +163,7 @@ const SesiMengajar: React.FC = () => {
             });
         };
 
-        const handleRecalculate = (data: any) => {
+        const handleRecalculate = (_data: any) => {
             // If we wanted to be specific: if (user.teacherId === data.teacherId) ... but simple re-fetch is safe
             console.log('Schedule updated, refreshing session...');
             fetchSessionData();
@@ -278,7 +279,8 @@ const SesiMengajar: React.FC = () => {
         try {
             const statuses = Object.entries(attendance).map(([studentId, status]) => ({
                 studentId: Number(studentId),
-                status
+                status,
+                notes: studentNotes[Number(studentId)] || undefined,
             }));
 
             await api.post(`/sessions/${createdSessionId}/student-attendance`, { statuses });
@@ -761,6 +763,15 @@ const SesiMengajar: React.FC = () => {
 
     // View: ATTENDANCE FORM (Right after scan)
     if (viewMode === 'ATTENDANCE_FORM') {
+        // Compute summary stats
+        const attendanceCounts = {
+            present: 0, late: 0, sick: 0, permission: 0, alpha: 0
+        };
+        Object.values(attendance).forEach(s => {
+            if (s in attendanceCounts) attendanceCounts[s as keyof typeof attendanceCounts]++;
+        });
+        const needsNotes = (status: AttendanceStatus) => ['sick', 'permission', 'alpha'].includes(status);
+
         return (
             <div className="max-w-2xl mx-auto space-y-6 pb-20">
                 <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -768,21 +779,60 @@ const SesiMengajar: React.FC = () => {
                         <h2 className="font-bold text-lg">Absensi Siswa</h2>
                         <p className="opacity-90 text-sm">Silakan isi kehadiran siswa untuk memulai sesi.</p>
                     </div>
+
+                    {/* Summary Stats Bar */}
+                    <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap gap-2 items-center">
+                        <span className="text-xs text-gray-500 mr-1">Ringkasan:</span>
+                        {[
+                            { label: 'H', count: attendanceCounts.present, color: 'bg-green-100 text-green-700' },
+                            { label: 'T', count: attendanceCounts.late, color: 'bg-yellow-100 text-yellow-700' },
+                            { label: 'S', count: attendanceCounts.sick, color: 'bg-blue-100 text-blue-700' },
+                            { label: 'I', count: attendanceCounts.permission, color: 'bg-purple-100 text-purple-700' },
+                            { label: 'A', count: attendanceCounts.alpha, color: 'bg-red-100 text-red-700' },
+                        ].map(item => (
+                            <span key={item.label} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${item.color} ${item.count === 0 ? 'opacity-40' : ''}`}>
+                                {item.label}: {item.count}
+                            </span>
+                        ))}
+                        <span className="ml-auto text-xs text-gray-400">{students.length} siswa</span>
+                    </div>
+
                     <div className="max-h-[60vh] overflow-y-auto divide-y">
                         {students.map((student) => (
-                            <div key={student.id} className="p-4 flex items-center justify-between gap-4 hover:bg-gray-50">
-                                <span className="font-medium">{student.name}</span>
-                                <div className="flex gap-1">
-                                    {STATUS_OPTIONS.map((opt) => (
-                                        <button
-                                            key={opt.value}
-                                            onClick={() => setAttendance(prev => ({ ...prev, [student.id]: opt.value as AttendanceStatus }))}
-                                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${attendance[student.id] === opt.value ? `${opt.bg} ${opt.color} ring-2 ring-offset-1` : 'bg-gray-100 text-gray-400'}`}
-                                        >
-                                            {opt.label[0]}
-                                        </button>
-                                    ))}
+                            <div key={student.id} className="p-4 hover:bg-gray-50 transition">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <span className="font-medium text-sm">{student.name}</span>
+                                        <span className="text-xs text-gray-400 ml-2">{student.nis}</span>
+                                    </div>
+                                    <div className="flex gap-1 flex-shrink-0">
+                                        {STATUS_OPTIONS.map((opt) => (
+                                            <button
+                                                key={opt.value}
+                                                onClick={() => setAttendance(prev => ({ ...prev, [student.id]: opt.value as AttendanceStatus }))}
+                                                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${attendance[student.id] === opt.value ? `${opt.bg} ${opt.color} ring-2 ring-offset-1` : 'bg-gray-100 text-gray-400'}`}
+                                            >
+                                                {opt.label[0]}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
+                                {/* Notes input for non-present statuses */}
+                                {attendance[student.id] && needsNotes(attendance[student.id]) && (
+                                    <div className="mt-2 ml-0">
+                                        <input
+                                            type="text"
+                                            value={studentNotes[student.id] || ''}
+                                            onChange={(e) => setStudentNotes(prev => ({ ...prev, [student.id]: e.target.value }))}
+                                            placeholder={
+                                                attendance[student.id] === 'sick' ? 'Keterangan sakit (opsional)...'
+                                                    : attendance[student.id] === 'permission' ? 'Alasan izin (opsional)...'
+                                                        : 'Keterangan alpha (opsional)...'
+                                            }
+                                            className="w-full text-xs px-3 py-1.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none bg-gray-50"
+                                        />
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

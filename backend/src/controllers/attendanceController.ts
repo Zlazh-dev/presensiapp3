@@ -255,8 +255,9 @@ export const recordAttendance = async (
 /**
  * Auto-fill alpha for teachers who didn't record attendance
  * Checks both regular working hours AND class sessions
+ * Skips holidays and weekends (Saturday/Sunday)
  */
-export const autoFillAlpha = async (targetDate?: string): Promise<{ regularCreated: number; sessionCreated: number }> => {
+export const autoFillAlpha = async (targetDate?: string): Promise<{ regularCreated: number; sessionCreated: number; skipped?: string }> => {
     // Default to yesterday
     const dateToProcess = targetDate || (() => {
         const yesterday = new Date();
@@ -274,6 +275,26 @@ export const autoFillAlpha = async (targetDate?: string): Promise<{ regularCreat
         const targetDateObj = new Date(dateToProcess);
         const jsDay = targetDateObj.getDay(); // 0=Sunday, 1=Monday ...
         const dayOfWeek = jsDay === 0 ? 7 : jsDay; // Convert to 1-7 format
+
+        // === SKIP WEEKENDS ===
+        if (dayOfWeek === 6 || dayOfWeek === 7) {
+            console.log(`⏭️ Skipping alpha fill for weekend (dayOfWeek=${dayOfWeek})`);
+            return { regularCreated: 0, sessionCreated: 0, skipped: 'Weekend' };
+        }
+
+        // === SKIP HOLIDAYS ===
+        const holidays = await HolidayEvent.findAll({
+            where: {
+                date: dateToProcess,
+                isActive: true,
+            }
+        });
+
+        if (holidays.length > 0) {
+            const reasons = holidays.map((h: any) => h.reason).join(', ');
+            console.log(`⏭️ Skipping alpha fill for holiday: ${reasons}`);
+            return { regularCreated: 0, sessionCreated: 0, skipped: `Libur: ${reasons}` };
+        }
 
         // === PART 1: REGULAR WORKING HOURS ===
         console.log(`📋 Checking regular working hours for dayOfWeek=${dayOfWeek}...`);
@@ -306,7 +327,7 @@ export const autoFillAlpha = async (targetDate?: string): Promise<{ regularCreat
                     status: 'alpha',
                     checkInTime: undefined,
                     checkOutTime: undefined,
-                    notes: 'Auto-generated: Tidak ada rekap kehadiran reguler'
+                    notes: 'Auto-generated: Tidak hadir tanpa keterangan'
                 });
                 console.log(`   ✅ Alpha created for ${wh.teacher?.user?.name || 'Unknown'} (regular)`);
                 regularCreated++;
@@ -335,29 +356,57 @@ export const autoFillAlpha = async (targetDate?: string): Promise<{ regularCreat
         console.log(`   Found ${sessions.length} sessions on this date`);
 
         for (const session of sessions as any[]) {
-            const teacherId = session.schedule?.teacherId;
-            if (!teacherId) continue;
+            // If session has a substitute teacher, use substitute; otherwise use original
+            const effectiveTeacherId = session.substituteTeacherId || session.schedule?.teacherId;
+            if (!effectiveTeacherId) continue;
 
-            // Check if session attendance exists
+            // Check if session attendance exists for the effective teacher
             const existing = await TeacherAttendance.findOne({
                 where: {
-                    teacherId,
+                    teacherId: effectiveTeacherId,
                     sessionId: session.id
                 }
             });
 
             if (!existing) {
-                await TeacherAttendance.create({
-                    teacherId,
-                    sessionId: session.id,
-                    date: dateToProcess,
-                    status: 'alpha',
-                    checkInTime: undefined,
-                    checkOutTime: undefined,
-                    notes: 'Auto-generated: Tidak ada kehadiran untuk sesi ini'
+                // === SMART CHECK: Does this teacher have a regular izin/sakit for this date? ===
+                const regularLeave = await TeacherAttendance.findOne({
+                    where: {
+                        teacherId: effectiveTeacherId,
+                        date: dateToProcess,
+                        sessionId: { [Op.is]: null as any },
+                        status: { [Op.in]: ['sick', 'permission'] }
+                    }
                 });
-                console.log(`   ✅ Alpha created for ${session.schedule?.teacher?.user?.name || 'Unknown'} (session ${session.id})`);
-                sessionCreated++;
+
+                if (regularLeave) {
+                    // Cascade the leave status to the session (not alpha)
+                    await TeacherAttendance.create({
+                        teacherId: effectiveTeacherId,
+                        sessionId: session.id,
+                        date: dateToProcess,
+                        status: (regularLeave as any).status,
+                        checkInTime: undefined,
+                        checkOutTime: undefined,
+                        notes: `Auto-cascade: ${(regularLeave as any).status === 'sick' ? 'Sakit' : 'Izin'} — ${(regularLeave as any).notes || 'Tidak ada keterangan'}`
+                    });
+                    console.log(`   📋 Leave cascaded for teacher ${effectiveTeacherId} (session ${session.id}, status=${(regularLeave as any).status})`);
+                    // Don't count as sessionCreated (it's a cascade, not alpha)
+                } else {
+                    await TeacherAttendance.create({
+                        teacherId: effectiveTeacherId,
+                        sessionId: session.id,
+                        date: dateToProcess,
+                        status: 'alpha',
+                        checkInTime: undefined,
+                        checkOutTime: undefined,
+                        notes: session.substituteTeacherId
+                            ? 'Auto-generated: Guru pengganti tidak hadir tanpa keterangan'
+                            : 'Auto-generated: Tidak hadir mengajar tanpa keterangan'
+                    });
+                    console.log(`   ✅ Alpha created for teacher ${effectiveTeacherId} (session ${session.id}${session.substituteTeacherId ? ', substitute' : ''})`);
+                    sessionCreated++;
+                }
             }
         }
 
@@ -440,21 +489,64 @@ export const submitLeave = async (req: AuthRequest, res: Response): Promise<void
                 status: type,
                 notes: reason || undefined
             });
-            res.json({ success: true, message: 'Izin berhasil diperbarui', attendance: existing });
-            return;
+        } else {
+            // Create new attendance with leave status
+            await TeacherAttendance.create({
+                teacherId: teacher.id,
+                date,
+                status: type,
+                checkInTime: undefined,
+                checkOutTime: undefined,
+                notes: reason || undefined
+            });
         }
 
-        // Create new attendance with leave status
-        const attendance = await TeacherAttendance.create({
-            teacherId: teacher.id,
-            date,
-            status: type,
-            checkInTime: undefined,
-            checkOutTime: undefined,
-            notes: reason || undefined
+        // ══════ CASCADE TO ALL SESSIONS ON THIS DATE ══════
+        const sessions = await Session.findAll({
+            where: { date },
+            include: [{
+                model: Schedule,
+                as: 'schedule',
+                where: { teacherId: teacher.id },
+            }],
         });
 
-        res.status(201).json({ success: true, message: 'Izin berhasil diajukan', attendance });
+        let sessionsCascaded = 0;
+        for (const session of sessions as any[]) {
+            const existingSession = await TeacherAttendance.findOne({
+                where: { teacherId: teacher.id, sessionId: session.id }
+            });
+
+            if (existingSession) {
+                // Update if it was alpha or different status
+                if ((existingSession as any).status !== type) {
+                    await existingSession.update({
+                        status: type,
+                        notes: `Cascade: ${reason || 'Tidak ada keterangan'}`
+                    });
+                    sessionsCascaded++;
+                }
+            } else {
+                await TeacherAttendance.create({
+                    teacherId: teacher.id,
+                    sessionId: session.id,
+                    date,
+                    status: type,
+                    checkInTime: undefined,
+                    checkOutTime: undefined,
+                    notes: `Cascade: ${reason || 'Tidak ada keterangan'}`
+                });
+                sessionsCascaded++;
+            }
+        }
+
+        console.log(`📋 Leave submitted for teacher ${teacher.id}: ${type}, cascaded to ${sessionsCascaded} sessions`);
+
+        res.status(existing ? 200 : 201).json({
+            success: true,
+            message: `Izin berhasil ${existing ? 'diperbarui' : 'diajukan'}. ${sessionsCascaded > 0 ? `${sessionsCascaded} sesi KBM juga ditandai ${type === 'sick' ? 'sakit' : 'izin'}.` : ''}`,
+            sessionsCascaded,
+        });
 
     } catch (error) {
         console.error('Submit leave error:', error);

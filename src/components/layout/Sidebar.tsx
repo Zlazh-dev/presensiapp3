@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, QrCode, Calendar, FileBarChart, Settings, LogOut, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Users, QrCode, Calendar, FileBarChart, Settings, LogOut } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
 

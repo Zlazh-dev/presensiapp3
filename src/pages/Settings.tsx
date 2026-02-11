@@ -4,10 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
 import {
-    Save, Calendar, Clock, Users, Plus, X,
+    Calendar, Clock, Plus, X,
     Trash2, Edit2, Loader2, AlertTriangle,
     CalendarOff, Grid3X3, RefreshCw, Upload, Download,
-    Settings as SettingsIcon, CheckSquare, QrCode, Printer,
+    QrCode, Printer,
     MapPin, Database, ShieldAlert, HardDrive,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -101,8 +101,7 @@ const Settings: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── Working Hours state ──
-    const [showCustomDayModal, setShowCustomDayModal] = useState(false);
-    const [customDayForm, setCustomDayForm] = useState({ teacherId: 0, dayOfWeek: 7, startTime: '07:00', endTime: '15:00' });
+    const [_showCustomDayModal, _setShowCustomDayModal] = useState(false);
 
     // ── Mass setup state ──
     const [massStartTime, setMassStartTime] = useState('07:00');
@@ -172,19 +171,8 @@ const Settings: React.FC = () => {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workingHours'] }),
     });
 
-    const addCustomDayMutation = useMutation({
-        mutationFn: async (data: { teacherId: number; dayOfWeek: number; startTime: string; endTime: string }) => {
-            const res = await fetch(`${API}/working-hours`, {
-                method: 'POST', headers: getHeaders(), body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error(await res.text());
-            return res.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['workingHours'] });
-            setShowCustomDayModal(false);
-        },
-    });
+
+
 
     // ── Tolerance update mutation ──
     const updateToleranceMutation = useMutation({
@@ -587,11 +575,8 @@ const Settings: React.FC = () => {
         updateTimeMutation.mutate(data);
     }, [updateTimeMutation]);
 
-    const handleCustomDaySubmit = useCallback((e: React.FormEvent) => {
-        e.preventDefault();
-        if (!customDayForm.teacherId) return;
-        addCustomDayMutation.mutate(customDayForm);
-    }, [customDayForm, addCustomDayMutation]);
+
+
 
     const isMutating = createSlotMutation.isPending || updateSlotMutation.isPending;
 

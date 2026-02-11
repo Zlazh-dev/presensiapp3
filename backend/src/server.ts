@@ -3,6 +3,7 @@ process.env.TZ = 'Asia/Jakarta';
 
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
 import sequelize from './config/database';
 import bcrypt from 'bcrypt';
@@ -22,6 +23,7 @@ import workingHoursRoutes from './routes/workingHoursRoutes';
 import geofenceRoutes from './routes/geofenceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import sessionRoutes from './routes/sessionRoutes';
+import { apiLimiter } from './middlewares/rateLimiter';
 
 // Import models to initialize associations
 import './models';
@@ -31,10 +33,17 @@ dotenv.config();
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
+// Security middleware
+app.use(helmet());
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Global API rate limiter
+app.use('/api', apiLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);

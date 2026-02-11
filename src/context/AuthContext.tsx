@@ -7,6 +7,7 @@ export interface User {
     role: 'admin' | 'teacher' | 'guru';
     name: string;
     email?: string;
+    teacherId?: number;
     // Add other fields as needed
 }
 
