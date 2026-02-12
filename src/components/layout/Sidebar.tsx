@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, QrCode, Calendar, FileBarChart, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, QrCode, Calendar, FileBarChart, Settings, LogOut, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
 
@@ -25,8 +25,9 @@ const Sidebar = () => {
     const teacherItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard-guru' },
         { icon: QrCode, label: 'Sesi Mengajar', path: '/sesi-mengajar' },
-        { icon: Calendar, label: 'Jadwal Saya', path: '/jadwal' },
-        { icon: FileBarChart, label: 'Rekap Kehadiran', path: '/rekap' },
+        { icon: Calendar, label: 'Jadwal Saya', path: '/guru/jadwal' },
+        { icon: FileBarChart, label: 'Rekap Kehadiran', path: '/guru/rekap' },
+        { icon: FileText, label: 'Izin / Sakit', path: '/guru/izin-sakit' },
         { icon: Settings, label: 'Pengaturan', path: '/settings' },
     ];
 

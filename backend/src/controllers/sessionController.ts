@@ -97,6 +97,35 @@ export const checkInSession = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
 
+        // 3.1 [CHAIN RULE] Check for Regular Attendance (Gateway Check)
+        // Teacher MUST validly check-in at Guru Room first
+        const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+        const regularAttendance = await TeacherAttendance.findOne({
+            where: {
+                teacherId: teacher.id,
+                date: todayStr,
+                sessionId: { [Op.is]: null as any } // Regular attendance only
+            },
+            transaction: t
+        });
+
+        if (!regularAttendance || !regularAttendance.checkInTime) {
+            await t.rollback();
+            res.status(403).json({
+                error: 'Harap Check-in kehadiran reguler di Ruang Guru terlebih dahulu sebelum memulai sesi kelas.'
+            });
+            return;
+        }
+
+        // If they are marked as sick/permission from regular attendance, they shouldn't be starting sessions
+        if (['sick', 'permission', 'alpha'].includes(regularAttendance.status)) {
+            await t.rollback();
+            res.status(403).json({
+                error: `Anda tercatat sedang ${regularAttendance.status === 'sick' ? 'SAKIT' : 'IZIN/ALPHA'}. Tidak dapat memulai sesi.`
+            });
+            return;
+        }
+
         // 3.5 SINGLE SOURCE OF TRUTH: Check for existing active session
         // A teacher can only have ONE active session at a time
         const activeSession = await sessionManager.hasActiveSession(teacher.id);
@@ -240,6 +269,57 @@ export const checkInSession = async (req: AuthRequest, res: Response): Promise<v
                 startTime: timeStr,
                 status: 'ongoing',
             }, { transaction: t });
+
+            // [AUTO-MERGE LOGIC] check for contiguous schedules
+            // If we just created a new session, let's see if we should extend it immediately
+            // Logic: Find next schedule where startTime == current schedule.endTime
+            // Repeat until no more contiguous schedules found
+            let currentSchedParams = {
+                endTime: schedule.endTime,
+                classId: schedule.classId,
+                teacherId: schedule.teacherId,
+                subjectId: schedule.subjectId,
+                dayOfWeek: schedule.dayOfWeek
+            };
+
+            let mergeCount = 0;
+            let finalEndTime = schedule.endTime;
+            let mergedScheduleIds = [schedule.id];
+
+            // Safety limit: max 5 merges to prevent infinite loops if data is bad
+            for (let i = 0; i < 5; i++) {
+                const nextSched = await Schedule.findOne({
+                    where: {
+                        classId: currentSchedParams.classId,
+                        teacherId: currentSchedParams.teacherId,
+                        subjectId: currentSchedParams.subjectId,
+                        dayOfWeek: currentSchedParams.dayOfWeek,
+                        startTime: currentSchedParams.endTime,
+                        isActive: true
+                    },
+                    transaction: t
+                });
+
+                if (nextSched) {
+                    console.log(`🔗 [AUTO-MERGE] Found contiguous schedule: ${nextSched.id} (Start: ${nextSched.startTime}, End: ${nextSched.endTime})`);
+                    finalEndTime = nextSched.endTime;
+                    mergedScheduleIds.push(nextSched.id);
+                    mergeCount++;
+
+                    // Update params for next iteration
+                    currentSchedParams.endTime = nextSched.endTime;
+                } else {
+                    break; // No more contiguous schedules
+                }
+            }
+
+            if (mergeCount > 0) {
+                console.log(`✅ [AUTO-MERGE] Session ${session.id} extended. Merged ${mergeCount} additional schedules. New EndTime: ${finalEndTime}`);
+                await session.update({
+                    endTime: finalEndTime,
+                    notes: `Auto-merged with schedules: ${mergedScheduleIds.join(', ')}`
+                }, { transaction: t });
+            }
         } else {
             // If already completed?
             if (session.status === 'completed') {

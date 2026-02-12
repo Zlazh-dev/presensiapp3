@@ -12,8 +12,27 @@ import TimeSlot from './TimeSlot';
 import HolidayEvent from './HolidayEvent';
 import TeacherWorkingHours from './TeacherWorkingHours';
 import Geofence from './Geofence';
+import RegistrationToken from './RegistrationToken';
 
-// User <-> Teacher (1:1)
+// ... (existing relationships)
+
+export {
+    User,
+    Teacher,
+    Class,
+    Student,
+    Subject,
+    Schedule,
+    Session,
+    TeacherAttendance,
+    StudentAttendance,
+    ActivityLog,
+    TimeSlot,
+    HolidayEvent,
+    TeacherWorkingHours,
+    Geofence,
+    RegistrationToken,
+};
 User.hasOne(Teacher, { foreignKey: 'userId', as: 'teacher', onDelete: 'CASCADE' });
 Teacher.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
@@ -50,7 +69,7 @@ Teacher.hasMany(TeacherAttendance, { foreignKey: 'teacherId', as: 'attendance', 
 TeacherAttendance.belongsTo(Teacher, { foreignKey: 'teacherId', as: 'teacher' });
 
 // Session <-> TeacherAttendance (1:N)
-Session.hasMany(TeacherAttendance, { foreignKey: 'sessionId', as: 'teacherAttendance' });
+Session.hasMany(TeacherAttendance, { foreignKey: 'sessionId', as: 'teacherAttendance', onDelete: 'CASCADE' });
 TeacherAttendance.belongsTo(Session, { foreignKey: 'sessionId', as: 'session' });
 
 // Student <-> StudentAttendance (1:N)
@@ -77,19 +96,4 @@ HolidayEvent.belongsTo(Class, { foreignKey: 'classId', as: 'class' });
 Teacher.hasMany(TeacherWorkingHours, { foreignKey: 'teacherId', as: 'workingHours', onDelete: 'CASCADE' });
 TeacherWorkingHours.belongsTo(Teacher, { foreignKey: 'teacherId', as: 'teacher' });
 
-export {
-    User,
-    Teacher,
-    Class,
-    Student,
-    Subject,
-    Schedule,
-    Session,
-    TeacherAttendance,
-    StudentAttendance,
-    ActivityLog,
-    TimeSlot,
-    HolidayEvent,
-    TeacherWorkingHours,
-    Geofence,
-};
+

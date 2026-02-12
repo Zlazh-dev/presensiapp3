@@ -4,17 +4,17 @@ import api from '../lib/api';
 interface IzinFormData {
     type: 'sick' | 'permission';
     date: string;
-    reason?: string;
+    reason: string;
+    assignmentText?: string;
+    file?: File;
 }
 
 interface IzinResponse {
     success: boolean;
     message: string;
-    attendance?: {
-        id: number;
-        date: string;
-        status: string;
-    };
+    sessionsCascaded?: number;
+    autoCheckedOut?: boolean;
+    impactedSessions?: number;
 }
 
 export const useIzinSubmit = (onSuccess?: () => void) => {
@@ -22,10 +22,19 @@ export const useIzinSubmit = (onSuccess?: () => void) => {
 
     return useMutation({
         mutationFn: async (data: IzinFormData): Promise<IzinResponse> => {
-            const response = await api.post('/attendance/guru/submit-leave', {
-                type: data.type,
-                date: data.date,
-                reason: data.reason || undefined,
+            const formData = new FormData();
+            formData.append('type', data.type);
+            formData.append('date', data.date);
+            formData.append('reason', data.reason);
+            if (data.assignmentText) {
+                formData.append('assignmentText', data.assignmentText);
+            }
+            if (data.file) {
+                formData.append('file', data.file);
+            }
+
+            const response = await api.post('/attendance/guru/submit-leave', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
             return response.data;
         },

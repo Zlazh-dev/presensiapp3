@@ -4,11 +4,9 @@ import api from '../lib/api';
 import {
     MapPin, RefreshCw, Camera, CameraOff, Upload, CheckCircle, XCircle,
     Loader2, LogIn, LogOut as LogOutIcon,
-    Wifi, WifiOff, ScanLine, Clock, Lock, AlertTriangle, FileText,
+    Wifi, WifiOff, ScanLine, Clock, Lock, AlertTriangle,
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { IzinModal } from '../components/guru/IzinModal';
-import { LeaveHistory } from '../components/guru/LeaveHistory';
 
 // ─── Types ────────────────────────────────────────────
 interface GeofenceStatus {
@@ -68,8 +66,7 @@ const GuruDashboard: React.FC = () => {
     const cameraRequestInProgress = useRef(false);
     const handleScanResultRef = useRef<(qr: string) => void>(() => { });
 
-    // Izin modal state
-    const [showIzinModal, setShowIzinModal] = useState(false);
+
 
     // Attendance today
     const [todayAttendance, setTodayAttendance] = useState<AttendanceToday | null>(null);
@@ -959,27 +956,6 @@ const GuruDashboard: React.FC = () => {
                     </p>
                 </div>
             </div>
-
-            {/* ─── Ajukan Izin Button ─── */}
-            <div className="flex justify-center">
-                <button
-                    onClick={() => setShowIzinModal(true)}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 border-2 border-amber-200 text-amber-700 rounded-xl font-medium text-sm hover:bg-amber-100 hover:border-amber-300 transition-all"
-                >
-                    <FileText className="w-4 h-4" />
-                    Ajukan Izin/Sakit
-                </button>
-            </div>
-
-            {/* ─── Leave History ─── */}
-            <LeaveHistory />
-
-            {/* ─── Izin Modal ─── */}
-            <IzinModal
-                isOpen={showIzinModal}
-                onClose={() => setShowIzinModal(false)}
-                onSuccess={fetchAttendanceToday}
-            />
         </div>
     );
 };

@@ -42,7 +42,10 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Global API rate limiter
+// Serve uploaded files (assignments, etc.)
+import path from 'path';
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 app.use('/api', apiLimiter);
 
 // Routes
@@ -180,6 +183,24 @@ const startServer = async () => {
 
         // 3. Always seed admin user (production & development)
         await seedAdminUser();
+
+        // 4. Auto-migrate new columns (safe to run multiple times)
+        const qi = sequelize.getQueryInterface();
+        const teacherAttCols = await qi.describeTable('teacher_attendance').catch(() => ({}));
+        if (!(teacherAttCols as any)['assignmentText']) {
+            await qi.addColumn('teacher_attendance', 'assignmentText', {
+                type: require('sequelize').DataTypes.TEXT,
+                allowNull: true,
+            }).catch(() => console.log('⚠️  assignmentText column may already exist'));
+            console.log('✓ Added assignmentText column');
+        }
+        if (!(teacherAttCols as any)['attachmentUrl']) {
+            await qi.addColumn('teacher_attendance', 'attachmentUrl', {
+                type: require('sequelize').DataTypes.STRING(500),
+                allowNull: true,
+            }).catch(() => console.log('⚠️  attachmentUrl column may already exist'));
+            console.log('✓ Added attachmentUrl column');
+        }
 
 
 

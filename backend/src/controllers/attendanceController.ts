@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import path from 'path';
 import { getJakartaToday, getJakartaTime } from '../utils/date';
 import { Op } from 'sequelize';
 import { TeacherAttendance, StudentAttendance, User, Student, Teacher, Class, HolidayEvent, Geofence, TeacherWorkingHours, Session, Schedule } from '../models';
@@ -443,8 +444,9 @@ export const triggerAutoFillAlpha = async (req: Request, res: Response): Promise
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Submit leave request (sakit/izin)
+ * Submit leave request (sakit/izin) — with assignment upload
  * POST /api/attendance/guru/submit-leave
+ * Body (multipart/form-data): type, date, reason, assignmentText, file?
  */
 export const submitLeave = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -461,47 +463,78 @@ export const submitLeave = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
-        const { type, date, reason } = req.body;
-        // type: 'sick' | 'permission'
+        const { type, date, reason, assignmentText } = req.body;
+        const file = (req as any).file as Express.Multer.File | undefined;
 
+        // ── Validation ──
         if (!type || !date) {
-            res.status(400).json({ error: 'type and date are required' });
+            res.status(400).json({ error: 'Jenis izin dan tanggal wajib diisi' });
             return;
         }
-
         if (!['sick', 'permission'].includes(type)) {
-            res.status(400).json({ error: 'type must be "sick" or "permission"' });
+            res.status(400).json({ error: 'Jenis harus "sick" atau "permission"' });
+            return;
+        }
+        if (!reason || reason.trim().length === 0) {
+            res.status(400).json({ error: 'Alasan wajib diisi' });
+            return;
+        }
+        // Must provide at least one: file OR assignmentText
+        if (!file && (!assignmentText || assignmentText.trim().length === 0)) {
+            res.status(400).json({ error: 'Wajib menyertakan tugas: upload file ATAU ketik tugas' });
             return;
         }
 
-        // Check if already has attendance for this date
-        const existing = await TeacherAttendance.findOne({
+        const attachmentUrl = file ? `/uploads/assignments/${file.filename}` : undefined;
+
+        // ── Auto-checkout if already checked in today ──
+        const existingRegular = await TeacherAttendance.findOne({
             where: {
                 teacherId: teacher.id,
                 date,
-                sessionId: { [Op.is]: null as any } // Only check regular attendance
+                sessionId: { [Op.is]: null as any }
             }
         });
 
-        if (existing) {
-            // Update existing record
-            await existing.update({
+        let autoCheckedOut = false;
+        if (existingRegular && existingRegular.checkInTime && !existingRegular.checkOutTime) {
+            // Teacher already checked in — auto checkout
+            const now = getJakartaTime();
+            await existingRegular.update({
+                checkOutTime: now,
                 status: type,
-                notes: reason || undefined
+                notes: reason,
+                assignmentText: assignmentText || undefined,
+                attachmentUrl: attachmentUrl || undefined,
+            });
+            autoCheckedOut = true;
+        } else if (existingRegular) {
+            // Record exists (maybe alpha or another status) — update
+            await existingRegular.update({
+                status: type,
+                notes: reason,
+                assignmentText: assignmentText || undefined,
+                attachmentUrl: attachmentUrl || undefined,
             });
         } else {
-            // Create new attendance with leave status
+            // No record yet — create new
             await TeacherAttendance.create({
                 teacherId: teacher.id,
                 date,
                 status: type,
                 checkInTime: undefined,
                 checkOutTime: undefined,
-                notes: reason || undefined
+                notes: reason,
+                assignmentText: assignmentText || undefined,
+                attachmentUrl: attachmentUrl || undefined,
             });
         }
 
         // ══════ CASCADE TO ALL SESSIONS ON THIS DATE ══════
+        // Logic:
+        // 1. If session is COMPLETED, do not change it (Teacher was present).
+        // 2. If session is ONGOING, force finish it? Or just mark attendance as sick?
+        //    For now, we mark attendance as sick/permission for any session that is NOT completed.
         const sessions = await Session.findAll({
             where: { date },
             include: [{
@@ -512,19 +545,27 @@ export const submitLeave = async (req: AuthRequest, res: Response): Promise<void
         });
 
         let sessionsCascaded = 0;
+        let sessionsImpacted = 0; // Sessions that were effectively cancelled/overridden
+
         for (const session of sessions as any[]) {
+            // Skip if session is already completed (Teacher taught this class)
+            if (session.status === 'completed') {
+                continue;
+            }
+
             const existingSession = await TeacherAttendance.findOne({
                 where: { teacherId: teacher.id, sessionId: session.id }
             });
 
             if (existingSession) {
-                // Update if it was alpha or different status
                 if ((existingSession as any).status !== type) {
                     await existingSession.update({
                         status: type,
-                        notes: `Cascade: ${reason || 'Tidak ada keterangan'}`
+                        notes: `Limit Izin: ${reason}`,
+                        checkOutTime: existingSession.checkInTime ? getJakartaTime() : undefined // Force checkout if checked in
                     });
                     sessionsCascaded++;
+                    sessionsImpacted++;
                 }
             } else {
                 await TeacherAttendance.create({
@@ -534,18 +575,65 @@ export const submitLeave = async (req: AuthRequest, res: Response): Promise<void
                     status: type,
                     checkInTime: undefined,
                     checkOutTime: undefined,
-                    notes: `Cascade: ${reason || 'Tidak ada keterangan'}`
+                    notes: `Cascade: ${reason}`
                 });
                 sessionsCascaded++;
+                sessionsImpacted++;
             }
         }
 
-        console.log(`📋 Leave submitted for teacher ${teacher.id}: ${type}, cascaded to ${sessionsCascaded} sessions`);
+        // Also count SCHEDULES that haven't become SESSIONS yet
+        // (This catches classes later today that haven't been started)
+        const dayOfWeek = new Date(date).getDay() || 7;
+        const potentialSchedules = await Schedule.findAll({
+            where: {
+                teacherId: teacher.id,
+                dayOfWeek,
+                isActive: true
+            }
+        });
 
-        res.status(existing ? 200 : 201).json({
+        // We want to count how many "periods" are missed. 
+        // A rough approximation is fine, or we can trust `sessionsCascaded` if we ensure all sessions are created?
+        // Actually, sessions are usually created ON DEMAND when scanning. 
+        // If they don't exist yet, we can't cascade to them easily unless we pre-create them.
+        // BUT: autoFillAlpha will handle them later if they remain missing.
+        // BETTER: We should probably create the session records now to ensure they show up in "Guru Pengganti" page immediately.
+
+        for (const sched of potentialSchedules) {
+            // Check if session already exists in our `sessions` array
+            const found = sessions.find((s: any) => s.scheduleId === sched.id);
+            if (!found) {
+                // Create session shell
+                const newSession = await Session.create({
+                    scheduleId: sched.id,
+                    date,
+                    status: 'scheduled', // It's scheduled but teacher is absent
+                    startTime: sched.startTime,
+                    endTime: sched.endTime
+                });
+
+                // Mark attendance as sick/permission
+                await TeacherAttendance.create({
+                    teacherId: teacher.id,
+                    sessionId: newSession.id,
+                    date,
+                    status: type,
+                    notes: `Cascade (Pre-generated): ${reason}`
+                });
+                sessionsCascaded++;
+                sessionsImpacted++;
+            }
+        }
+
+        console.log(`📋 Leave submitted for teacher ${teacher.id}: ${type}, impacted ${sessionsImpacted} sessions/schedules, autoCheckedOut: ${autoCheckedOut}`);
+
+        res.status(existingRegular ? 200 : 201).json({
             success: true,
-            message: `Izin berhasil ${existing ? 'diperbarui' : 'diajukan'}. ${sessionsCascaded > 0 ? `${sessionsCascaded} sesi KBM juga ditandai ${type === 'sick' ? 'sakit' : 'izin'}.` : ''}`,
-            sessionsCascaded,
+            message: `Izin berhasil ${existingRegular ? 'diperbarui' : 'diajukan'}.${autoCheckedOut ? ' Anda otomatis di-checkout.' : ''} ${sessionsImpacted > 0 ? `${sessionsImpacted} sesi KBM ditandai sebagai kosong (butuh pengganti).` : ''}`,
+            sessionsCascaded: sessionsImpacted,
+            autoCheckedOut,
+            impactedSessions: sessionsImpacted
         });
 
     } catch (error) {
@@ -575,7 +663,8 @@ export const getLeaveHistory = async (req: AuthRequest, res: Response): Promise<
         const leaves = await TeacherAttendance.findAll({
             where: {
                 teacherId: teacher.id,
-                status: { [Op.in]: ['sick', 'permission'] }
+                status: { [Op.in]: ['sick', 'permission'] },
+                sessionId: { [Op.is]: null as any }, // Only regular attendance records
             },
             order: [['date', 'DESC']],
             limit: 50
@@ -587,6 +676,8 @@ export const getLeaveHistory = async (req: AuthRequest, res: Response): Promise<
             status: l.status,
             statusLabel: l.status === 'sick' ? 'Sakit' : 'Izin',
             reason: l.notes,
+            assignmentText: l.assignmentText || null,
+            attachmentUrl: l.attachmentUrl || null,
             createdAt: l.createdAt
         }));
 
@@ -597,3 +688,26 @@ export const getLeaveHistory = async (req: AuthRequest, res: Response): Promise<
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+/**
+ * Download leave attachment file
+ * GET /api/attendance/guru/leave-attachment/:id
+ */
+export const getLeaveAttachment = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const id = req.params.id as string;
+        const record = await TeacherAttendance.findByPk(id);
+        if (!record || !record.attachmentUrl) {
+            res.status(404).json({ error: 'Attachment not found' });
+            return;
+        }
+
+        const filePath = path.join(__dirname, '../../', record.attachmentUrl);
+        res.download(filePath);
+    } catch (error) {
+        console.error('Get leave attachment error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+

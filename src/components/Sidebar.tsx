@@ -17,6 +17,7 @@ import {
     BookOpen,
     BarChart3,
     FileText,
+    QrCode,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -50,6 +51,7 @@ const Sidebar: React.FC = () => {
         { label: 'Guru Pengganti', path: '/guru-pengganti', icon: UserCheck },
         { label: 'Rekap', path: '/rekap', icon: ClipboardList },
         { label: 'Izin Guru', path: '/izin-guru', icon: FileText },
+        { label: 'QR Registrasi', path: '/admin/qr', icon: QrCode },
         { label: 'Pengaturan', path: '/settings', icon: Settings },
     ];
 
@@ -58,6 +60,7 @@ const Sidebar: React.FC = () => {
         { label: 'Sesi Mengajar', path: '/sesi-mengajar', icon: BookOpen },
         { label: 'Jadwal Saya', path: '/guru/jadwal', icon: Calendar },
         { label: 'Rekap Kehadiran', path: '/guru/rekap', icon: ClipboardList },
+        { label: 'Izin / Sakit', path: '/guru/izin-sakit', icon: FileText },
     ];
 
     const isTeacher = user?.role === 'teacher' || user?.role === 'guru';

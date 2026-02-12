@@ -1157,12 +1157,15 @@ export const getTeacherLeaves = async (req: Request, res: Response): Promise<voi
             where.status = status;
         }
 
+        // Only get daily records (not per-session)
+        where.sessionId = null;
+
         const records = await TeacherAttendance.findAll({
             where,
             include: [{
                 model: Teacher,
                 as: 'teacher',
-                attributes: ['id', 'fullName', 'employeeId', 'phone'],
+                attributes: ['id', 'employeeId', 'phone'],
                 include: [{
                     model: User,
                     as: 'user',
@@ -1171,6 +1174,12 @@ export const getTeacherLeaves = async (req: Request, res: Response): Promise<voi
             }],
             order: [['date', 'DESC'], ['createdAt', 'DESC']],
         });
+
+        // ... (rest of mapping logic is same, so I can just close the function or rely on context match)
+        // Wait, replace_file needs exact target.
+        // I will just replace the query part and the error handler.
+
+        // Let's target the query execution block.
 
         let rows = records.map((r: any) => ({
             id: r.id,
@@ -1182,9 +1191,11 @@ export const getTeacherLeaves = async (req: Request, res: Response): Promise<voi
             status: r.status,
             statusLabel: r.status === 'sick' ? 'Sakit' : 'Izin',
             notes: r.notes || null,
+            assignmentText: r.assignmentText || null,
             attachmentUrl: r.attachmentUrl || null,
             createdAt: r.createdAt,
         }));
+
 
         // Filter by search term if provided
         if (search) {
@@ -1206,6 +1217,6 @@ export const getTeacherLeaves = async (req: Request, res: Response): Promise<voi
         });
     } catch (error: any) {
         console.error('Get teacher leaves error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 };

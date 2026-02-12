@@ -14,6 +14,8 @@ interface TeacherAttendanceAttributes {
     latitude?: number;
     longitude?: number;
     notes?: string;
+    assignmentText?: string;
+    attachmentUrl?: string;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -34,6 +36,8 @@ class TeacherAttendance extends Model<TeacherAttendanceAttributes, TeacherAttend
     public latitude?: number;
     public longitude?: number;
     public notes?: string;
+    public assignmentText?: string;
+    public attachmentUrl?: string;
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
 
@@ -65,7 +69,7 @@ TeacherAttendance.init(
                 model: 'sessions',
                 key: 'id',
             },
-            onDelete: 'SET NULL',
+            onDelete: 'CASCADE',
         },
         date: {
             type: DataTypes.DATEONLY,
@@ -103,6 +107,14 @@ TeacherAttendance.init(
         },
         notes: {
             type: DataTypes.TEXT,
+            allowNull: true,
+        },
+        assignmentText: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
+        attachmentUrl: {
+            type: DataTypes.STRING(500),
             allowNull: true,
         },
     },

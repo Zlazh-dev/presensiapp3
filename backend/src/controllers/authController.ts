@@ -1,7 +1,11 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { User, Teacher } from '../models';
+import { User, Teacher, RegistrationToken } from '../models';
 import { generateToken } from '../utils/jwt';
+import { Op } from 'sequelize';
+import sequelize from '../config/database';
+// Use require for uuid to avoid missing types error
+const { v4: uuidv4 } = require('uuid');
 
 export const register = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -59,7 +63,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         }
 
         // Look up by username OR email
-        const { Op } = require('sequelize');
         const user = await User.findOne({
             where: {
                 [Op.or]: [
@@ -288,10 +291,6 @@ export const seedTestUsers = async (req: Request, res: Response): Promise<void> 
     }
 };
 
-/**
- * List seeded test users (debug endpoint)
- * GET /api/auth/test-users
- */
 export const getTestUsers = async (req: Request, res: Response): Promise<void> => {
     try {
         const users = await User.findAll({
@@ -314,5 +313,177 @@ export const getTestUsers = async (req: Request, res: Response): Promise<void> =
     } catch (error) {
         console.error('Get test users error:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// ==========================================
+// QR CODE REGISTRATION
+// ==========================================
+
+/**
+ * Generate a new registration token (Admin only)
+ * POST /api/auth/tokens
+ */
+export const generateRegistrationToken = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { description, maxUses, expiresInHours, role } = req.body;
+
+        // Calculate expiration
+        let expiresAt: Date | undefined;
+        if (expiresInHours) {
+            expiresAt = new Date();
+            expiresAt.setHours(expiresAt.getHours() + Number(expiresInHours));
+        }
+
+        const token = await RegistrationToken.create({
+            token: uuidv4(), // Explicitly generate token
+            description,
+            maxUses: maxUses || 1,
+            expiresAt,
+            role: role || 'teacher',
+            usedCount: 0,
+            isActive: true,
+        });
+
+        res.status(201).json({
+            message: 'Token generated successfully',
+            token: token.token,
+            expiresAt: token.expiresAt,
+            maxUses: token.maxUses,
+        });
+    } catch (error) {
+        console.error('Generate token error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+/**
+ * List all registration tokens (Admin only)
+ * GET /api/auth/tokens
+ */
+export const getRegistrationTokens = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const tokens = await RegistrationToken.findAll({
+            order: [['createdAt', 'DESC']],
+        });
+        res.json(tokens);
+    } catch (error) {
+        console.error('Get tokens error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+/**
+ * Validate a token (Public)
+ * GET /api/auth/validate-token/:token
+ */
+export const validateToken = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { token } = req.params;
+
+        if (!token) {
+            res.status(400).json({ valid: false, error: 'Token required' });
+            return;
+        }
+
+        const record = await RegistrationToken.findByPk(token as string);
+
+        if (!record) {
+            res.status(404).json({ valid: false, error: 'Token tidak ditemukan' });
+            return;
+        }
+
+        if (!record.isActive) {
+            res.status(400).json({ valid: false, error: 'Token non-aktif' });
+            return;
+        }
+
+        if (record.expiresAt && new Date() > new Date(record.expiresAt)) {
+            res.status(400).json({ valid: false, error: 'Token kadaluarsa' });
+            return;
+        }
+
+        if (record.maxUses !== null && record.maxUses !== undefined && record.usedCount >= record.maxUses) {
+            res.status(400).json({ valid: false, error: 'Token sudah habis digunakan' });
+            return;
+        }
+
+        res.json({ valid: true, role: record.role, description: record.description });
+    } catch (error) {
+        console.error('Validate token error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+/**
+ * Register with a token (Public)
+ * POST /api/auth/register-with-token
+ */
+export const registerWithToken = async (req: Request, res: Response): Promise<void> => {
+    const t = await sequelize.transaction();
+
+    try {
+        const { token, username, password, fullName, nip, phone } = req.body;
+
+        // 1. Validate Token Again
+        const record = await RegistrationToken.findByPk(token as string, { transaction: t });
+
+        if (!record || !record.isActive) {
+            await t.rollback();
+            res.status(400).json({ error: 'Token tidak valid' });
+            return;
+        }
+        if (record.expiresAt && new Date() > new Date(record.expiresAt)) {
+            await t.rollback();
+            res.status(400).json({ error: 'Token kadaluarsa' });
+            return;
+        }
+        if (record.maxUses !== null && record.maxUses !== undefined && record.usedCount >= record.maxUses) {
+            await t.rollback();
+            res.status(400).json({ error: 'Token sudah habis digunakan' });
+            return;
+        }
+
+        // 2. Check User Existence
+        const existingUser = await User.findOne({ where: { username }, transaction: t });
+        if (existingUser) {
+            await t.rollback();
+            res.status(400).json({ error: 'Username sudah digunakan' });
+            return;
+        }
+
+        // 3. Create User & Teacher Transaction
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = await User.create({
+            username,
+            password: hashedPassword,
+            role: record.role as 'teacher' | 'admin',
+            name: fullName,
+            isActive: true, // Auto-active if using token
+        }, { transaction: t });
+
+        if (record.role === 'teacher') {
+            await Teacher.create({
+                userId: user.id,
+                employeeId: nip,
+                phone: phone,
+            }, { transaction: t });
+        }
+
+        // 4. Update Token Usage
+        await record.increment('usedCount', { by: 1, transaction: t });
+
+        await t.commit();
+
+        res.status(201).json({
+            message: 'Registrasi berhasil',
+            user: { id: user.id, username: user.username, role: user.role }
+        });
+
+    } catch (error: any) {
+        await t.rollback();
+        console.error('Register with token error:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 };

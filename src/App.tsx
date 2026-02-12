@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
+import PublicRegister from './pages/PublicRegister';
 import SesiMengajar from './pages/SesiMengajar';
 import GuruDashboard from './pages/GuruDashboard';
 import JadwalSaya from './pages/JadwalSaya';
@@ -12,12 +13,14 @@ import AdminUsersPage from './pages/AdminUsersPage';
 import AdminMapelPage from './pages/AdminMapelPage';
 import Jadwal from './pages/Jadwal';
 import GuruPengganti from './pages/GuruPengganti';
+import AdminQRGenerator from './pages/AdminQRGenerator';
 import Rekap from './pages/Rekap';
 import Analitik from './pages/Analitik';
 import Laporan from './pages/Laporan';
 import IzinGuru from './pages/IzinGuru';
 import ManajemenKelas from './pages/ManajemenKelas';
 import KelolaSiswa from './pages/KelolaSiswa';
+import IzinSakitPage from './pages/guru/IzinSakitPage';
 import AdminRoute from './components/AdminRoute';
 import TeacherRoute from './components/TeacherRoute';
 import MainLayout from './components/MainLayout';
@@ -45,6 +48,7 @@ function App() {
       <SocketProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<PublicRegister />} />
 
           {/* Teacher Routes */}
           <Route element={<TeacherRoute />}>
@@ -53,6 +57,7 @@ function App() {
               <Route path="/sesi-mengajar" element={<SesiMengajar />} />
               <Route path="/guru/jadwal" element={<JadwalSaya />} />
               <Route path="/guru/rekap" element={<Rekap />} />
+              <Route path="/guru/izin-sakit" element={<IzinSakitPage />} />
               <Route path="/profile" element={<div className="text-center text-gray-500 py-12">Profile page — coming soon</div>} />
             </Route>
           </Route>
@@ -71,6 +76,8 @@ function App() {
               <Route path="/rekap" element={<Rekap />} />
               <Route path="/analitik" element={<Analitik />} />
               <Route path="/izin-guru" element={<IzinGuru />} />
+              <Route path="/izin-guru" element={<IzinGuru />} />
+              <Route path="/admin/qr" element={<AdminQRGenerator />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/laporan" element={<Laporan />} />
             </Route>
