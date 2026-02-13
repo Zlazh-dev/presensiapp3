@@ -5,10 +5,14 @@ module.exports = {
         const transaction = await queryInterface.sequelize.transaction();
         try {
             // 1. Add qrCodeData to classes
-            await queryInterface.addColumn('classes', 'qrCodeData', {
-                type: Sequelize.STRING,
-                allowNull: true,
-            }, { transaction });
+            try {
+                await queryInterface.addColumn('classes', 'qrCodeData', {
+                    type: Sequelize.STRING,
+                    allowNull: true,
+                }, { transaction });
+            } catch (err) {
+                console.log('qrCodeData column already exists, skipping');
+            }
 
             // 2. Remove old unique constraint on teacher_attendance
             // Note: We try to remove the index by name. 
