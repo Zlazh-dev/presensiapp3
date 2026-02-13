@@ -8,7 +8,8 @@
       "Bash(findstr:*)",
       "Bash(npm run build:*)",
       "Bash(npm run lint)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(pm2 status:*)"
     ]
   }
 }

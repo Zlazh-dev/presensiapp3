@@ -21,7 +21,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     useEffect(() => {
         if (!token) return;
 
-        const newSocket = io('http://localhost:5000', {
+        const newSocket = io('/', {
+            path: '/socket.io',
             auth: { token },
             transports: ['websocket', 'polling'],
             withCredentials: true
@@ -40,7 +41,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSocket(newSocket);
 
         // Initialize Sessions Namespace Socket
-        const sessSocket = io('http://localhost:5000/sessions', {
+        const sessSocket = io('/sessions', {
+            path: '/socket.io',
             auth: { token },
             transports: ['websocket', 'polling'],
             withCredentials: true

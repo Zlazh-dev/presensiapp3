@@ -307,7 +307,7 @@ const GuruPenggantiInner: React.FC = () => {
 
     // Socket.IO for real-time updates
     useEffect(() => {
-        const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+        const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || window.location.origin;
         const socket: Socket = io(SOCKET_URL, {
             transports: ['websocket', 'polling'],
             withCredentials: true

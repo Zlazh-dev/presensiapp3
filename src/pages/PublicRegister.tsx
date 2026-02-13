@@ -47,7 +47,7 @@ const PublicRegister = () => {
     const validateToken = async (tokenStr: string) => {
         try {
             // Use standard fetch or axios, assuming public endpoint
-            const res = await axios.get(`http://localhost:5000/api/auth/validate-token/${tokenStr}`);
+            const res = await axios.get(`/api/auth/validate-token/${tokenStr}`);
             setTokenData(res.data);
             setValidating(false);
         } catch (err: any) {
@@ -69,7 +69,7 @@ const PublicRegister = () => {
 
         setSubmitting(true);
         try {
-            await axios.post('http://localhost:5000/api/auth/register-with-token', {
+            await axios.post('/api/auth/register-with-token', {
                 token,
                 ...formData
             });
