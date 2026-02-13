@@ -4,60 +4,25 @@ import { Loader2, Camera, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface ScannerProps {
     onScanSuccess: (decodedText: string) => void;
-    onScanFailure?: (error: any) => void;
+    onScanFailure?: (error: unknown) => void;
 }
 
 const Scanner: React.FC<ScannerProps> = ({ onScanSuccess, onScanFailure }) => {
     const [isScanning, setIsScanning] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [cameras, setCameras] = useState<any[]>([]);
+    const [cameras, setCameras] = useState<Array<{ id: string; label?: string }>>([]);
     const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
     const scannerRef = useRef<Html5Qrcode | null>(null);
-
-    useEffect(() => {
-        // 1. Get Cameras
-        const getCameras = async () => {
-            try {
-                const devices = await Html5Qrcode.getCameras();
-                if (devices && devices.length) {
-                    setCameras(devices);
-                    // Default to the last camera (usually back camera on mobile)
-                    setSelectedCameraId(devices[devices.length - 1].id);
-                } else {
-                    setError("Tidak ada kamera yang ditemukan.");
-                }
-            } catch (err: any) {
-                console.error("Error getting cameras", err);
-                setError("Gagal mengakses kamera. Pastikan izin diberikan.");
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        getCameras();
-
-        return () => {
-            // Cleanup: stop scanner if running
-            if (scannerRef.current && scannerRef.current.isScanning) {
-                scannerRef.current.stop().catch(err => console.error("Failed to stop scanner cleanup", err));
-            }
-        };
-    }, []);
-
-    // 2. Start Scanner when camera is selected
-    useEffect(() => {
-        if (selectedCameraId && !isScanning) {
-            startScanner(selectedCameraId);
-        }
-    }, [selectedCameraId]);
 
     const startScanner = async (cameraId: string) => {
         // Ensure previous instance is stopped
         if (scannerRef.current?.isScanning) {
             try {
                 await scannerRef.current.stop();
-            } catch (ignore) { }
+            } catch {
+                // Ignore errors during cleanup
+            }
         }
 
         const html5QrCode = new Html5Qrcode("reader");
@@ -77,14 +42,15 @@ const Scanner: React.FC<ScannerProps> = ({ onScanSuccess, onScanFailure }) => {
                 (decodedText) => {
                     handleSuccess(decodedText);
                 },
-                (_errorMessage) => {
-                    // Ignore transient errors
+                () => {
+                    // Ignore scanning errors
                 }
             );
             setIsScanning(true);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to start scanner", err);
-            setError(`Gagal memulai kamera: ${err.message || err}`);
+            const message = err instanceof Error ? err.message : String(err);
+            setError(`Gagal memulai kamera: ${message}`);
             setIsScanning(false);
             if (onScanFailure) onScanFailure(err);
         } finally {
@@ -101,6 +67,42 @@ const Scanner: React.FC<ScannerProps> = ({ onScanSuccess, onScanFailure }) => {
         }
         onScanSuccess(decodedText);
     };
+
+    useEffect(() => {
+        // 1. Get Cameras
+        const getCameras = async () => {
+            try {
+                const devices = await Html5Qrcode.getCameras();
+                if (devices && devices.length) {
+                    setCameras(devices);
+                    // Default to last camera (usually back camera on mobile)
+                    setSelectedCameraId(devices[devices.length - 1].id);
+                } else {
+                    setError("Tidak ada kamera yang ditemukan.");
+                }
+            } catch (err: unknown) {
+                console.error("Error getting cameras", err);
+                setError("Gagal mengakses kamera. Pastikan izin diberikan.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        getCameras();
+
+        return () => {
+            // Cleanup: stop scanner if running
+            if (scannerRef.current && scannerRef.current.isScanning) {
+                scannerRef.current.stop().catch(err => console.error("Failed to stop scanner cleanup", err));
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (selectedCameraId && !isScanning && !isLoading) {
+            startScanner(selectedCameraId);
+        }
+    }, [selectedCameraId, isLoading, isScanning]);
 
     const handleRetry = () => {
         if (selectedCameraId) {

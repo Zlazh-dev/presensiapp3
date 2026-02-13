@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp:*)",
+      "Bash(echo:*)",
+      "Bash(dir \"D:\\\\Code-Project\\\\presensiapp2\\\\backend\" /b)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint)",
+      "Bash(git add:*)"
+    ]
+  }
+}

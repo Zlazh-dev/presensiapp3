@@ -101,7 +101,7 @@ const Settings: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── Working Hours state ──
-    const [_showCustomDayModal, _setShowCustomDayModal] = useState(false);
+    // const [showCustomDayModal, setShowCustomDayModal] = useState(false);
 
     // ── Mass setup state ──
     const [massStartTime, setMassStartTime] = useState('07:00');
@@ -554,16 +554,9 @@ const Settings: React.FC = () => {
 
     const isHolidayMutating = createHolidayMutation.isPending || updateHolidayMutation.isPending;
 
-    // ── Access check ──
-    if (!user || user.role !== 'admin') {
-        return (
-            <div className="p-8 text-center text-red-600">
-                <h2 className="text-xl font-bold">Access Denied</h2>
-                <p>Only administrators can access this page.</p>
-            </div>
-        );
-    }
+    const isMutating = createSlotMutation.isPending || updateSlotMutation.isPending;
 
+    // ── Working Hours handlers ──
     const handleToggleDay = useCallback((teacherId: number, dayOfWeek: number, currentlyEnabled: boolean) => {
         toggleDayMutation.mutate({ teacherId, dayOfWeek, enabled: !currentlyEnabled });
     }, [toggleDayMutation]);
@@ -574,11 +567,6 @@ const Settings: React.FC = () => {
             : { id, startTime: otherValue, endTime: value };
         updateTimeMutation.mutate(data);
     }, [updateTimeMutation]);
-
-
-
-
-    const isMutating = createSlotMutation.isPending || updateSlotMutation.isPending;
 
     // ── QR handlers ──
     const handleGenerateRoomQR = useCallback(async () => {
@@ -593,7 +581,7 @@ const Settings: React.FC = () => {
             const data = await res.json();
             setRoomQR(data);
             setShowQRModal(true);
-        } catch (err) {
+        } catch {
             alert('Gagal generate QR');
         } finally {
             setQrLoading(false);
@@ -620,11 +608,21 @@ const Settings: React.FC = () => {
             <p style="color:#666;margin-bottom:20px;">Tempel di ruang guru — semua guru scan QR ini untuk check-in / check-out</p>
             <img src="${roomQR.qrCode}" style="width:300px;height:300px;" />
             <p style="margin-top:16px;font-size:12px;color:#999;">Scan menggunakan aplikasi PresensiApp</p>
-            <script>setTimeout(()=>window.print(),500);<\/script>
+            <script>setTimeout(()=>window.print(),500);</script>
             </body></html>
         `);
         printWindow.document.close();
     }, [roomQR]);
+
+    // ── Access check ──
+    if (!user || user.role !== 'admin') {
+        return (
+            <div className="p-8 text-center text-red-600">
+                <h2 className="text-xl font-bold">Access Denied</h2>
+                <p>Only administrators can access this page.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 p-4">
